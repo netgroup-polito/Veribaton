@@ -19,8 +19,12 @@ package it.polito.veribaton.api.catalogue;
 import io.swagger.annotations.ApiOperation;
 import org.openbaton.catalogue.mano.descriptor.NetworkServiceDescriptor;
 import org.openbaton.exceptions.NotFoundException;
+import org.openbaton.sdk.NFVORequestor;
+import org.openbaton.sdk.NfvoRequestorBuilder;
+import org.openbaton.sdk.api.exception.SDKException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -30,8 +34,19 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 @RestController
-@RequestMapping("/api/v1/ns-descriptors")
+@RequestMapping("/ns-descriptors")
 public class NetworkServiceDescriptorController {
+
+    @Value("${openbaton.host}")
+    private String nfvHost;
+    @Value("${openbaton.port}")
+    private Integer nfvPort;
+    @Value("${openbaton.username}")
+    private String nfvUser;
+    @Value("${openbaton.password}")
+    private String nfvPassword;
+    @Value("${openbaton.ssl}")
+    private Boolean nfvSslEnabled;
 
     private Logger log = LoggerFactory.getLogger(this.getClass());
 
@@ -56,7 +71,26 @@ public class NetworkServiceDescriptorController {
             @RequestHeader(value = "project-id") String projectId) {
         NetworkServiceDescriptor nsd;
         log.trace("Just Received: " + networkServiceDescriptor);
-        //nsd = networkServiceDescriptorManagement.onboard(networkServiceDescriptor, projectId);
+        NFVORequestor requestor =
+                null;
+        try {
+            requestor = NfvoRequestorBuilder.create()
+                    .nfvoIp(nfvHost)
+                    .nfvoPort(nfvPort)
+                    .username(nfvUser)
+                    .password(nfvPassword)
+                    .projectName(projectId)
+                    .sslEnabled(nfvSslEnabled)
+                    .version("1")
+                    .build();
+
+
+            requestor.getNetworkServiceDescriptorAgent().create(networkServiceDescriptor);
+        } catch (SDKException e) {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
+
         return null;
     }
 
@@ -72,7 +106,25 @@ public class NetworkServiceDescriptorController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(
             @PathVariable("id") String id, @RequestHeader(value = "project-id") String projectId) {
-        //networkServiceDescriptorManagement.delete(id, projectId);
+        NFVORequestor requestor =
+                null;
+        try {
+            requestor = NfvoRequestorBuilder.create()
+                    .nfvoIp(nfvHost)
+                    .nfvoPort(nfvPort)
+                    .username(nfvUser)
+                    .password(nfvPassword)
+                    .projectName(projectId)
+                    .sslEnabled(nfvSslEnabled)
+                    .version("1")
+                    .build();
+
+
+            requestor.getNetworkServiceDescriptorAgent().delete(id);
+        } catch (SDKException e) {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -81,7 +133,6 @@ public class NetworkServiceDescriptorController {
      * @param ids: the list of the ids
      * @throws InterruptedException
      * @throws ExecutionException
-     * @throws VimException
      */
     @RequestMapping(
             value = "/multipledelete",
@@ -93,7 +144,26 @@ public class NetworkServiceDescriptorController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void multipleDelete(
             @RequestBody @Valid List<String> ids, @RequestHeader(value = "project-id") String projectId) {
-        //for (String id : ids) networkServiceDescriptorManagement.delete(id, projectId);
+
+        NFVORequestor requestor =
+                null;
+        try {
+            requestor = NfvoRequestorBuilder.create()
+                    .nfvoIp(nfvHost)
+                    .nfvoPort(nfvPort)
+                    .username(nfvUser)
+                    .password(nfvPassword)
+                    .projectName(projectId)
+                    .sslEnabled(nfvSslEnabled)
+                    .version("1")
+                    .build();
+
+
+            for (String id : ids) requestor.getNetworkServiceDescriptorAgent().delete(id);
+        } catch (SDKException e) {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -108,8 +178,25 @@ public class NetworkServiceDescriptorController {
     @RequestMapping(method = RequestMethod.GET)
     public List<NetworkServiceDescriptor> findAll(
             @RequestHeader(value = "project-id") String projectId) {
-        return null; //(List<NetworkServiceDescriptor>)
-        //networkServiceDescriptorManagement.queryByProjectId(projectId);
+        NFVORequestor requestor =
+                null;
+        try {
+            requestor = NfvoRequestorBuilder.create()
+                    .nfvoIp(nfvHost)
+                    .nfvoPort(nfvPort)
+                    .username(nfvUser)
+                    .password(nfvPassword)
+                    .projectName(projectId)
+                    .sslEnabled(nfvSslEnabled)
+                    .version("1")
+                    .build();
+
+            return null;//requestor.getNetworkServiceDescriptorAgent().findAll();
+
+        } catch (SDKException e) {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -125,7 +212,30 @@ public class NetworkServiceDescriptorController {
     public NetworkServiceDescriptor findById(
             @PathVariable("id") String id, @RequestHeader(value = "project-id") String projectId)
             throws NotFoundException {
+        NFVORequestor requestor =
+                null;
+        try {
+            requestor = NfvoRequestorBuilder.create()
+                    .nfvoIp(nfvHost)
+                    .nfvoPort(nfvPort)
+                    .username(nfvUser)
+                    .password(nfvPassword)
+                    .projectName(projectId)
+                    .sslEnabled(nfvSslEnabled)
+                    .version("1")
+                    .build();
+
+        } catch (SDKException e) {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
+
         NetworkServiceDescriptor nsd = null;//networkServiceDescriptorManagement.query(id, projectId);
+        try {
+            nsd = requestor.getNetworkServiceDescriptorAgent().findById(id);
+        } catch (SDKException e) {
+            e.printStackTrace();
+        }
         if (nsd == null)
             throw new NotFoundException("Did not find a Network Service Descriptor with ID " + id);
         return nsd;
@@ -152,6 +262,25 @@ public class NetworkServiceDescriptorController {
             @RequestBody @Valid NetworkServiceDescriptor networkServiceDescriptor,
             @PathVariable("id") String id,
             @RequestHeader(value = "project-id") String projectId) {
-        return null; //networkServiceDescriptorManagement.update(networkServiceDescriptor, projectId);
+        NFVORequestor requestor =
+                null;
+        try {
+            requestor = NfvoRequestorBuilder.create()
+                    .nfvoIp(nfvHost)
+                    .nfvoPort(nfvPort)
+                    .username(nfvUser)
+                    .password(nfvPassword)
+                    .projectName(projectId)
+                    .sslEnabled(nfvSslEnabled)
+                    .version("1")
+                    .build();
+
+            return requestor.getNetworkServiceDescriptorAgent().update(networkServiceDescriptor, id);
+
+        } catch (SDKException e) {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
+        //networkServiceDescriptorManagement.update(networkServiceDescriptor, projectId);
     }
 }

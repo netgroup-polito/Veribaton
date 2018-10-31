@@ -23,6 +23,10 @@ bootJar {
 
 repositories {
     mavenCentral()
+
+    maven {
+        url 'https://oss.sonatype.org/content/repositories/snapshots/'
+    }
 }
 
 sourceCompatibility = 1.8
@@ -33,6 +37,5 @@ dependencies {
     compile 'io.springfox:springfox-swagger2:2.9.2'
     compile 'io.springfox:springfox-swagger-ui:2.9.2'
     compile 'com.google.code.gson:gson'
-
-    testCompile 'org.springframework.boot:spring-boot-starter-test'
+    compile 'org.openbaton:sdk:6.0.0'
 }
