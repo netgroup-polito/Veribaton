@@ -17,7 +17,10 @@
 package it.polito.veribaton.api.catalogue;
 
 import io.swagger.annotations.ApiOperation;
+import it.polito.veribaton.model.*;
 import org.openbaton.catalogue.mano.descriptor.NetworkServiceDescriptor;
+import org.openbaton.catalogue.mano.descriptor.VirtualNetworkFunctionDescriptor;
+import org.openbaton.exceptions.BadRequestException;
 import org.openbaton.exceptions.NotFoundException;
 import org.openbaton.sdk.NFVORequestor;
 import org.openbaton.sdk.NfvoRequestorBuilder;
@@ -68,13 +71,12 @@ public class NetworkServiceDescriptorController {
             notes = "POST request with Network Service Descriptor as JSON content of the request body")
     public NetworkServiceDescriptor create(
             @RequestBody @Valid NetworkServiceDescriptor networkServiceDescriptor,
-            @RequestHeader(value = "project-id") String projectId) {
+            @RequestHeader(value = "project-id") String projectId) throws BadRequestException {
         NetworkServiceDescriptor nsd;
         log.trace("Just Received: " + networkServiceDescriptor);
-        NFVORequestor requestor =
-                null;
+
         try {
-            requestor = NfvoRequestorBuilder.create()
+            NFVORequestor requestor = NfvoRequestorBuilder.create()
                     .nfvoIp(nfvHost)
                     .nfvoPort(nfvPort)
                     .username(nfvUser)
@@ -84,14 +86,76 @@ public class NetworkServiceDescriptorController {
                     .version("1")
                     .build();
 
+            NFV nfv = new NFV();
+            Graph graph = new Graph();
+            graph.setId((long) networkServiceDescriptor.getName().hashCode());
+            for (VirtualNetworkFunctionDescriptor vnfd : networkServiceDescriptor.getVnfd()) {
+                Node vnf = new Node();
+                vnf.setId((long) vnfd.getName().hashCode());
+                vnf.setName(vnfd.getName());
+                vnf.setFunctionalType(FunctionalTypes.valueOf(vnfd.getType()));
+                if (vnfd.getConfigurations() != null) {
+                    Configuration cfg = new Configuration();
+                    cfg.setName(vnfd.getConfigurations().getName() != null ? vnfd.getConfigurations().getName() : "");
+                    switch (vnf.getFunctionalType()) {
+                        case ANTISPAM:
+                            cfg.setAntispam(new Antispam());
+                            break;
+                        case DPI:
+                            cfg.setDpi(new Dpi());
+                            break;
+                        case NAT:
+                            cfg.setNat(new Nat());
+                            break;
+                        case CACHE:
+                            cfg.setCache(new Cache());
+                            break;
+                        case ENDHOST:
+                            cfg.setEndhost(new Endhost());
+                            break;
+                        case VPNEXIT:
+                            cfg.setVpnexit(new Vpnexit());
+                            break;
+                        case ENDPOINT:
+                            cfg.setEndpoint(new Endpoint());
+                            break;
+                        case FIREWALL:
+                            cfg.setFirewall(new Firewall());
+                            break;
+                        case VPNACCESS:
+                            cfg.setVpnaccess(new Vpnaccess());
+                            break;
+                        case WEBCLIENT:
+                            cfg.setWebclient(new Webclient());
+                            break;
+                        case WEBSERVER:
+                            cfg.setWebserver(new Webserver());
+                            break;
+                        case MAILCLIENT:
+                            cfg.setMailclient(new Mailclient());
+                            break;
+                        case MAILSERVER:
+                            cfg.setMailserver(new Mailserver());
+                            break;
+                        case FIELDMODIFIER:
+                            cfg.setFieldmodifier(new Fieldmodifier());
+                            break;
 
-            requestor.getNetworkServiceDescriptorAgent().create(networkServiceDescriptor);
+                        default:
+                            throw new BadRequestException("VNF type not supported");
+
+                    }
+
+                    vnf.setConfiguration(cfg);
+                }
+            }
+
+
+            return requestor.getNetworkServiceDescriptorAgent().create(networkServiceDescriptor);
         } catch (SDKException e) {
             e.printStackTrace();
             throw new RuntimeException(e);
         }
-
-        return null;
     }
 
     /**
@@ -106,10 +170,8 @@ public class NetworkServiceDescriptorController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(
             @PathVariable("id") String id, @RequestHeader(value = "project-id") String projectId) {
-        NFVORequestor requestor =
-                null;
         try {
-            requestor = NfvoRequestorBuilder.create()
+            NFVORequestor requestor = NfvoRequestorBuilder.create()
                     .nfvoIp(nfvHost)
                     .nfvoPort(nfvPort)
                     .username(nfvUser)
@@ -145,10 +207,8 @@ public class NetworkServiceDescriptorController {
     public void multipleDelete(
             @RequestBody @Valid List<String> ids, @RequestHeader(value = "project-id") String projectId) {
 
-        NFVORequestor requestor =
-                null;
         try {
-            requestor = NfvoRequestorBuilder.create()
+            NFVORequestor requestor = NfvoRequestorBuilder.create()
                     .nfvoIp(nfvHost)
                     .nfvoPort(nfvPort)
                     .username(nfvUser)
@@ -178,10 +238,8 @@ public class NetworkServiceDescriptorController {
     @RequestMapping(method = RequestMethod.GET)
     public List<NetworkServiceDescriptor> findAll(
             @RequestHeader(value = "project-id") String projectId) {
-        NFVORequestor requestor =
-                null;
         try {
-            requestor = NfvoRequestorBuilder.create()
+            NFVORequestor requestor = NfvoRequestorBuilder.create()
                     .nfvoIp(nfvHost)
                     .nfvoPort(nfvPort)
                     .username(nfvUser)
@@ -191,7 +249,7 @@ public class NetworkServiceDescriptorController {
                     .version("1")
                     .build();
 
-            return null;//requestor.getNetworkServiceDescriptorAgent().findAll();
+            return requestor.getNetworkServiceDescriptorAgent().findAll();
 
         } catch (SDKException e) {
             e.printStackTrace();
@@ -212,8 +270,7 @@ public class NetworkServiceDescriptorController {
     public NetworkServiceDescriptor findById(
             @PathVariable("id") String id, @RequestHeader(value = "project-id") String projectId)
             throws NotFoundException {
-        NFVORequestor requestor =
-                null;
+        NFVORequestor requestor;
         try {
             requestor = NfvoRequestorBuilder.create()
                     .nfvoIp(nfvHost)
@@ -262,10 +319,9 @@ public class NetworkServiceDescriptorController {
             @RequestBody @Valid NetworkServiceDescriptor networkServiceDescriptor,
             @PathVariable("id") String id,
             @RequestHeader(value = "project-id") String projectId) {
-        NFVORequestor requestor =
-                null;
+
         try {
-            requestor = NfvoRequestorBuilder.create()
+            NFVORequestor requestor = NfvoRequestorBuilder.create()
                     .nfvoIp(nfvHost)
                     .nfvoPort(nfvPort)
                     .username(nfvUser)
