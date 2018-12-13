@@ -19,6 +19,7 @@ package org.openbaton.catalogue.mano.descriptor;
 import org.openbaton.catalogue.mano.common.NFVEntityDescriptor;
 import org.openbaton.catalogue.mano.common.Security;
 
+import javax.persistence.Entity;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
 import java.util.HashSet;
@@ -29,7 +30,7 @@ import java.util.Set;
  *
  * <p>Based on ETSI GS NFV-MAN 001 V1.1.1 (2014-12)
  */
-
+@Entity
 public class NetworkServiceDescriptor extends NFVEntityDescriptor {
 
     /**

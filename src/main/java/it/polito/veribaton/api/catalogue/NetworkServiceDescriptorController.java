@@ -16,10 +16,12 @@
 
 package it.polito.veribaton.api.catalogue;
 
+import com.google.gson.Gson;
 import io.swagger.annotations.ApiOperation;
 import it.polito.veribaton.model.*;
-import org.openbaton.catalogue.mano.descriptor.NetworkServiceDescriptor;
-import org.openbaton.catalogue.mano.descriptor.VirtualNetworkFunctionDescriptor;
+import it.polito.veribaton.utils.Converter;
+import org.openbaton.catalogue.mano.descriptor.*;
+import org.openbaton.exceptions.BadFormatException;
 import org.openbaton.exceptions.BadRequestException;
 import org.openbaton.exceptions.NotFoundException;
 import org.openbaton.sdk.NFVORequestor;
@@ -31,8 +33,22 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.server.ServerErrorException;
 
+import javax.servlet.http.HttpServletResponse;
 import javax.validation.Valid;
+import javax.xml.bind.JAXBContext;
+import javax.xml.bind.JAXBException;
+import javax.xml.bind.Marshaller;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
@@ -50,6 +66,16 @@ public class NetworkServiceDescriptorController {
     private String nfvPassword;
     @Value("${openbaton.ssl}")
     private Boolean nfvSslEnabled;
+    @Value("${verifoo.scheme}")
+    private String verifooScheme;
+    @Value("${verifoo.host}")
+    private String verifooHost;
+    @Value("${verifoo.port}")
+    private Integer verifooPort;
+    @Value("${verifoo.baseUri}")
+    private String verifooBaseUri;
+    @Value("${verifoo.deploymentUri}")
+    private String verifooDeploymentUri;
 
     private Logger log = LoggerFactory.getLogger(this.getClass());
 
@@ -71,91 +97,118 @@ public class NetworkServiceDescriptorController {
             notes = "POST request with Network Service Descriptor as JSON content of the request body")
     public NetworkServiceDescriptor create(
             @RequestBody @Valid NetworkServiceDescriptor networkServiceDescriptor,
+            HttpServletResponse response,
             @RequestHeader(value = "project-id") String projectId) throws BadRequestException {
-        NetworkServiceDescriptor nsd;
         log.trace("Just Received: " + networkServiceDescriptor);
 
         try {
-            NFVORequestor requestor = NfvoRequestorBuilder.create()
-                    .nfvoIp(nfvHost)
-                    .nfvoPort(nfvPort)
-                    .username(nfvUser)
-                    .password(nfvPassword)
-                    .projectName(projectId)
-                    .sslEnabled(nfvSslEnabled)
-                    .version("1")
-                    .build();
 
-            NFV nfv = new NFV();
-            Graph graph = new Graph();
-            graph.setId((long) networkServiceDescriptor.getName().hashCode());
-            for (VirtualNetworkFunctionDescriptor vnfd : networkServiceDescriptor.getVnfd()) {
-                Node vnf = new Node();
-                vnf.setId((long) vnfd.getName().hashCode());
-                vnf.setName(vnfd.getName());
-                vnf.setFunctionalType(FunctionalTypes.valueOf(vnfd.getType()));
-                if (vnfd.getConfigurations() != null) {
-                    Configuration cfg = new Configuration();
-                    cfg.setName(vnfd.getConfigurations().getName() != null ? vnfd.getConfigurations().getName() : "");
-                    switch (vnf.getFunctionalType()) {
-                        case ANTISPAM:
-                            cfg.setAntispam(new Antispam());
-                            break;
-                        case DPI:
-                            cfg.setDpi(new Dpi());
-                            break;
-                        case NAT:
-                            cfg.setNat(new Nat());
-                            break;
-                        case CACHE:
-                            cfg.setCache(new Cache());
-                            break;
-                        case ENDHOST:
-                            cfg.setEndhost(new Endhost());
-                            break;
-                        case VPNEXIT:
-                            cfg.setVpnexit(new Vpnexit());
-                            break;
-                        case ENDPOINT:
-                            cfg.setEndpoint(new Endpoint());
-                            break;
-                        case FIREWALL:
-                            cfg.setFirewall(new Firewall());
-                            break;
-                        case VPNACCESS:
-                            cfg.setVpnaccess(new Vpnaccess());
-                            break;
-                        case WEBCLIENT:
-                            cfg.setWebclient(new Webclient());
-                            break;
-                        case WEBSERVER:
-                            cfg.setWebserver(new Webserver());
-                            break;
-                        case MAILCLIENT:
-                            cfg.setMailclient(new Mailclient());
-                            break;
-                        case MAILSERVER:
-                            cfg.setMailserver(new Mailserver());
-                            break;
-                        case FIELDMODIFIER:
-                            cfg.setFieldmodifier(new Fieldmodifier());
-                            break;
+            NFV nfv = Converter.ETSIToVerifo(networkServiceDescriptor);
 
-                        default:
-                            throw new BadRequestException("VNF type not supported");
+            logXml(nfv, "/tmp/nfv.xml");
 
+            String uri = verifooScheme + "://" + verifooHost + ":" + verifooPort + verifooBaseUri + verifooDeploymentUri;
+            RestTemplate restTemplate = new RestTemplate();
+
+            try {
+                NFV result = restTemplate.postForObject(uri, nfv, NFV.class);
+
+                logXml(result, "/tmp/nfvResp.xml");
+
+                HashSet<String> connections = new HashSet<String>();
+
+              /*  for (VirtualNetworkFunctionDescriptor vnfd : networkServiceDescriptor.getVnfd()) {
+                    if (!result.getGraphs().getGraph().get(0).getNode().stream().filter(t -> t.getName().equals(vnfd.getName())).findFirst().isPresent()) {
+                        networkServiceDescriptor.getVnfd().remove(vnfd);
                     }
+                }*/
+                for (NodeConstraints.NodeMetrics nm : nfv.getConstraints().getNodeConstraints().getNodeMetrics()){
+                    if (nm.isOptional()) {
+                        Host middlebox = nfv.getHosts().getHost().stream().filter(t->t.getName().equals("middlebox")).findFirst().get();
+                        //if an optional node is not present in the list of nodes deployed on the middlebox then remove it
+                        if (!middlebox.getNodeRef().stream().filter(t->t.getNode().equals(nm.getNode())).findFirst().isPresent()){
+                            //find the specified node and remove it in etsi model
+                            networkServiceDescriptor.getVnfd().removeIf(t->t.getName().equals(nm.getNode()));
 
-                    vnf.setConfiguration(cfg);
+                            //find and remove it in verifoo definition
+                            result.getGraphs().getGraph().get(0).getNode().removeIf(t->t.getName().equals(nm.getNode()));
+
+                            //find and remove it from node neighbours
+                            for (Node n: result.getGraphs().getGraph().get(0).getNode()){
+                                n.getNeighbour().removeIf(t->t.getName().equals(nm.getNode()));
+                            }
+                        }
+                    }
                 }
+
+                logXml(result, "/tmp/nfvRespModified.xml");
+
+
+
+                for (Node node : result.getGraphs().getGraph().get(0).getNode()) {
+                    VirtualNetworkFunctionDescriptor currentVnfd = networkServiceDescriptor.getVnfd().stream().filter(t -> t.getName().equals(node.getName())).findFirst().get();
+                    //empty virtual link
+                    currentVnfd.setVirtual_link(new HashSet<>());
+                    //empty connection points
+                    currentVnfd.getVdu().forEach(t -> t.getVnfc().forEach(l -> l.setConnection_point(new HashSet<>())));
+
+                    for (Neighbour nodeNeighbour : node.getNeighbour()) {
+                        //add in alphabetical order to connections
+                        String vlink = node.getName().compareToIgnoreCase(nodeNeighbour.getName()) > 0 ? nodeNeighbour.getName() + node.getName() : node.getName() + nodeNeighbour.getName();
+                        connections.add(vlink);
+                        InternalVirtualLink vl = new InternalVirtualLink();
+                        vl.setName(vlink);
+                        currentVnfd.getVirtual_link().add(vl);
+                        VNFDConnectionPoint cp = new VNFDConnectionPoint();
+                        cp.setVirtual_link_reference(vlink);
+                        currentVnfd.getVdu().forEach(t -> t.getVnfc().forEach(l -> l.getConnection_point().add(cp)));
+                    }
+                }
+
+                networkServiceDescriptor.setVld(new HashSet<>());
+                for (String link : connections) {
+                    VirtualLinkDescriptor vld = new VirtualLinkDescriptor();
+                    vld.setName(link);
+                    networkServiceDescriptor.getVld().add(vld);
+                }
+
+                logJson(networkServiceDescriptor, "/tmp/nsd.json");
+
+
+/*                NFVORequestor requestor = NfvoRequestorBuilder.create()
+                        .nfvoIp(nfvHost)
+                        .nfvoPort(nfvPort)
+                        .username(nfvUser)
+                        .password(nfvPassword)
+                        .projectName(projectId)
+                        .sslEnabled(nfvSslEnabled)
+                        .version("1")
+                        .build();*/
+/*
+                NetworkServiceDescriptor creationResponse = requestor.getNetworkServiceDescriptorAgent().create(networkServiceDescriptor);
+                return requestor.getNetworkServiceDescriptorAgent().findById(creationResponse.getId());
+*/              //response.setHeader("X-Header", "TEST");
+                return null;
+            } catch (HttpClientErrorException restex) {
+                switch (restex.getStatusCode()) {
+                    case NOT_FOUND:
+                        throw new ResponseStatusException(HttpStatus.NOT_FOUND, restex.getResponseBodyAsString());
+
+                    case BAD_REQUEST:
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, restex.getResponseBodyAsString());
+
+                    default:
+                        throw new ServerErrorException(restex.getStatusCode() + " " + restex.getResponseBodyAsString());
+                }
+
+            } catch (HttpServerErrorException restex) {
+                throw new ServerErrorException(restex.getStatusCode() + " " + restex.getResponseBodyAsString());
             }
 
-
-            return requestor.getNetworkServiceDescriptorAgent().create(networkServiceDescriptor);
-        } catch (SDKException e) {
-            e.printStackTrace();
-            throw new RuntimeException(e);
+        } catch (BadFormatException e) {
+            throw new BadRequestException(e.getMessage());
         }
+
     }
 
     /**
@@ -338,5 +391,30 @@ public class NetworkServiceDescriptorController {
             throw new RuntimeException(e);
         }
         //networkServiceDescriptorManagement.update(networkServiceDescriptor, projectId);
+    }
+
+    private void logXml(Object o, String path){
+        try {
+            final JAXBContext jaxbContext = JAXBContext.newInstance(o.getClass());
+            final Marshaller marshaller = jaxbContext.createMarshaller();
+            marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, Boolean.TRUE);
+            marshaller.marshal(o, new File(path));
+        } catch (JAXBException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void logJson(Object o, String path){
+        try {
+            Gson gson = new Gson();
+            String nfvJson = gson.toJson(o);
+            File outJson = new File(path);
+            FileOutputStream os = new FileOutputStream(outJson);
+            os.write(nfvJson.getBytes());
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }

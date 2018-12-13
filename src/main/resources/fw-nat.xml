@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<NFV>
+    <graphs>
+        <graph id="351307232">
+            <node id="104993408" name="nodeB" functional_type="WEBSERVER">
+                <neighbour name="node2"/>
+                <neighbour name="node3"/>
+                <configuration name="unnamed">
+                    <webserver>
+                        <name>nodeB</name>
+                    </webserver>
+                </configuration>
+            </node>
+            <node id="104993409" name="nodeC" functional_type="WEBCLIENT">
+                <neighbour name="node2"/>
+                <neighbour name="node1"/>
+                <configuration>
+                    <webclient nameWebServer="nodeB"/>
+                </configuration>
+            </node>
+            <node id="104993391" name="node1" functional_type="FIREWALL">
+                <neighbour name="node2"/>
+                <neighbour name="nodeC"/>
+                <neighbour name="nodeA"/>
+                <configuration name="unnamed">
+                    <firewall/>
+                </configuration>
+            </node>
+            <node id="104993392" name="node2" functional_type="NAT">
+                <neighbour name="nodeB"/>
+                <neighbour name="nodeC"/>
+                <neighbour name="node3"/>
+                <neighbour name="nodeA"/>
+                <neighbour name="node1"/>
+                <configuration>
+                    <nat>
+                        <source>nodeB</source>
+                        <source>nodeA</source>
+                    </nat>
+                </configuration>
+            </node>
+            <node id="104993393" name="node3" functional_type="FIREWALL">
+                <neighbour name="nodeB"/>
+                <neighbour name="node2"/>
+                <configuration name="unnamed">
+                    <firewall/>
+                </configuration>
+            </node>
+            <node id="104993407" name="nodeA" functional_type="WEBCLIENT">
+                <neighbour name="node2"/>
+                <neighbour name="node1"/>
+                <configuration>
+                    <webclient nameWebServer="nodeB"/>
+                </configuration>
+            </node>
+        </graph>
+    </graphs>
+    <Constraints>
+        <NodeConstraints>
+            <NodeMetrics node="node1" optional="true"/>
+            <NodeMetrics node="node3" optional="true"/>
+        </NodeConstraints>
+        <BandwidthConstraints/>
+    </Constraints>
+    <PropertyDefinition>
+        <Property name="ReachabilityProperty" graph="351307232" src="nodeC" dst="nodeB"/>
+        <Property name="ReachabilityProperty" graph="351307232" src="nodeA" dst="nodeB"/>
+    </PropertyDefinition>
+    <Hosts>
+        <Host name="middlebox" cpu="1000" cores="1000" diskStorage="1000" memory="1000" type="MIDDLEBOX">
+            <SupportedVNF functional_type="ANTISPAM"/>
+            <SupportedVNF functional_type="CACHE"/>
+            <SupportedVNF functional_type="DPI"/>
+            <SupportedVNF functional_type="FIELDMODIFIER"/>
+            <SupportedVNF functional_type="FIREWALL"/>
+            <SupportedVNF functional_type="NAT"/>
+        </Host>
+        <Host name="host-nodeB" cpu="2" cores="2" diskStorage="2" memory="2" type="SERVER" fixedEndpoint="nodeB"/>
+        <Host name="host-nodeC" cpu="2" cores="2" diskStorage="2" memory="2" type="CLIENT" fixedEndpoint="nodeC"/>
+        <Host name="host-nodeA" cpu="2" cores="2" diskStorage="2" memory="2" type="CLIENT" fixedEndpoint="nodeA"/>
+    </Hosts>
+    <Connections>
+        <Connection sourceHost="middlebox" destHost="host-nodeB" avgLatency="1"/>
+        <Connection sourceHost="host-nodeC" destHost="middlebox" avgLatency="1"/>
+        <Connection sourceHost="host-nodeA" destHost="middlebox" avgLatency="1"/>
+    </Connections>
+    <ParsingString></ParsingString>
+</NFV>
