@@ -2,6 +2,12 @@
 
 Veribaton is a java Spring Boot service exposing a subset of [Openbaton](http://http://openbaton.github.io/) REST API to enable smart deployment through interaction with [Verifoo](https://github.com/netgroup-polito/verifoo).
 
+## Usage
+The service is available through its REST API. To interact with operations available and their documentation it is possible to access the following URL:
+
+`http:[veribaton_hostbaton]:[veribaton_port]/swagger`
+
+
 ## Installation
 Veribaton requires Java version 1.8 or higher, a release of Verifoo after January 2018 and Openbaton >= 5.0.0 to run properly.
 
@@ -42,3 +48,30 @@ The property `spring.autoconfigure.exclude=org.springframework.boot.autoconfigur
 ```sh
 $ ./gradlew bootRun
 ```
+
+## Packages description
+
+#### it.polito.veribaton
+The main class is `Application.java`. Takes care of starting up the tomcat embedded server and registering hooks for soft shutdown.
+ 
+#### it.polito.veribaton.api.catalogue
+Implements the API interface for Network Service Descriptor. The controller class is `NetworkServiceDescriptorController.java`, which handles requests for Network Services CRUD operations.
+
+#### it.polito.veribaton.swagger
+Includes the class `SwaggerController.java` which controls swagger documentation. Performs a URL rewrite to map /swagger endpoint to actual html location.
+
+#### it.polito.veribaton.utils
+The class `Converter.java` introduces methods to map Openbaton data model to Verifoo, and vice-versa.
+
+Class `LogWriter` has utility methods to log XML ans JSON object to file.
+
+#### it.polito.veribaton.errors
+`VeribatonErrorController.java` is the request controller for errors happening in the REST interface, such as an invalid URL.
+
+#### org.openbaton.catalogue
+Defines Openbaton data model.
+
+#### org.openbaton.exceptions
+Includes all possible exceptions that could happen from the point of view of the NFVO.
+
+
