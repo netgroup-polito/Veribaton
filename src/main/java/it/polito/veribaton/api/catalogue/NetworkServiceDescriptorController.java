@@ -16,10 +16,11 @@
 
 package it.polito.veribaton.api.catalogue;
 
-import com.google.gson.Gson;
+import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import it.polito.veribaton.model.*;
 import it.polito.veribaton.utils.Converter;
+import it.polito.veribaton.utils.LogWriter;
 import org.openbaton.catalogue.mano.descriptor.*;
 import org.openbaton.exceptions.BadFormatException;
 import org.openbaton.exceptions.BadRequestException;
@@ -41,19 +42,13 @@ import org.springframework.web.server.ServerErrorException;
 
 import javax.servlet.http.HttpServletResponse;
 import javax.validation.Valid;
-import javax.xml.bind.JAXBContext;
-import javax.xml.bind.JAXBException;
-import javax.xml.bind.Marshaller;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 @RestController
 @RequestMapping("/ns-descriptors")
+@Api(tags = "Network Service Descriptors")
 public class NetworkServiceDescriptorController {
 
     @Value("${openbaton.host}")
@@ -93,7 +88,7 @@ public class NetworkServiceDescriptorController {
             produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     @ApiOperation(
-            value = "Adding a Network Service Descriptor",
+            value = "Add a Network Service Descriptor",
             notes = "POST request with Network Service Descriptor as JSON content of the request body")
     public NetworkServiceDescriptor create(
             @RequestBody @Valid NetworkServiceDescriptor networkServiceDescriptor,
@@ -105,110 +100,108 @@ public class NetworkServiceDescriptorController {
 
             NFV nfv = Converter.ETSIToVerifo(networkServiceDescriptor);
 
-            logXml(nfv, "/tmp/nfv.xml");
+            LogWriter.logXml(nfv, "/tmp/nfv.xml");
 
             String uri = verifooScheme + "://" + verifooHost + ":" + verifooPort + verifooBaseUri + verifooDeploymentUri;
             RestTemplate restTemplate = new RestTemplate();
 
-            try {
-                NFV result = restTemplate.postForObject(uri, nfv, NFV.class);
 
-                logXml(result, "/tmp/nfvResp.xml");
+            NFV result = restTemplate.postForObject(uri, nfv, NFV.class);
 
-                HashSet<String> connections = new HashSet<String>();
+            LogWriter.logXml(result, "/tmp/nfvResp.xml");
+
+            HashSet<String> connections = new HashSet<String>();
 
               /*  for (VirtualNetworkFunctionDescriptor vnfd : networkServiceDescriptor.getVnfd()) {
                     if (!result.getGraphs().getGraph().get(0).getNode().stream().filter(t -> t.getName().equals(vnfd.getName())).findFirst().isPresent()) {
                         networkServiceDescriptor.getVnfd().remove(vnfd);
                     }
                 }*/
-                for (NodeConstraints.NodeMetrics nm : nfv.getConstraints().getNodeConstraints().getNodeMetrics()){
-                    if (nm.isOptional()) {
-                        Host middlebox = nfv.getHosts().getHost().stream().filter(t->t.getName().equals("middlebox")).findFirst().get();
-                        //if an optional node is not present in the list of nodes deployed on the middlebox then remove it
-                        if (!middlebox.getNodeRef().stream().filter(t->t.getNode().equals(nm.getNode())).findFirst().isPresent()){
-                            //find the specified node and remove it in etsi model
-                            networkServiceDescriptor.getVnfd().removeIf(t->t.getName().equals(nm.getNode()));
+            for (NodeConstraints.NodeMetrics nm : nfv.getConstraints().getNodeConstraints().getNodeMetrics()) {
+                if (nm.isOptional()) {
+                    Host middlebox = nfv.getHosts().getHost().stream().filter(t -> t.getName().equals("middlebox")).findFirst().get();
+                    //if an optional node is not present in the list of nodes deployed on the middlebox then remove it
+                    if (!middlebox.getNodeRef().stream().filter(t -> t.getNode().equals(nm.getNode())).findFirst().isPresent()) {
+                        //find the specified node and remove it in etsi model
+                        networkServiceDescriptor.getVnfd().removeIf(t -> t.getName().equals(nm.getNode()));
 
-                            //find and remove it in verifoo definition
-                            result.getGraphs().getGraph().get(0).getNode().removeIf(t->t.getName().equals(nm.getNode()));
+                        //find and remove it in verifoo definition
+                        result.getGraphs().getGraph().get(0).getNode().removeIf(t -> t.getName().equals(nm.getNode()));
 
-                            //find and remove it from node neighbours
-                            for (Node n: result.getGraphs().getGraph().get(0).getNode()){
-                                n.getNeighbour().removeIf(t->t.getName().equals(nm.getNode()));
-                            }
+                        //find and remove it from node neighbours
+                        for (Node n : result.getGraphs().getGraph().get(0).getNode()) {
+                            n.getNeighbour().removeIf(t -> t.getName().equals(nm.getNode()));
                         }
                     }
                 }
-
-                logXml(result, "/tmp/nfvRespModified.xml");
-
-
-
-                for (Node node : result.getGraphs().getGraph().get(0).getNode()) {
-                    VirtualNetworkFunctionDescriptor currentVnfd = networkServiceDescriptor.getVnfd().stream().filter(t -> t.getName().equals(node.getName())).findFirst().get();
-                    //empty virtual link
-                    currentVnfd.setVirtual_link(new HashSet<>());
-                    //empty connection points
-                    currentVnfd.getVdu().forEach(t -> t.getVnfc().forEach(l -> l.setConnection_point(new HashSet<>())));
-
-                    for (Neighbour nodeNeighbour : node.getNeighbour()) {
-                        //add in alphabetical order to connections
-                        String vlink = node.getName().compareToIgnoreCase(nodeNeighbour.getName()) > 0 ? nodeNeighbour.getName() + node.getName() : node.getName() + nodeNeighbour.getName();
-                        connections.add(vlink);
-                        InternalVirtualLink vl = new InternalVirtualLink();
-                        vl.setName(vlink);
-                        currentVnfd.getVirtual_link().add(vl);
-                        VNFDConnectionPoint cp = new VNFDConnectionPoint();
-                        cp.setVirtual_link_reference(vlink);
-                        currentVnfd.getVdu().forEach(t -> t.getVnfc().forEach(l -> l.getConnection_point().add(cp)));
-                    }
-                }
-
-                networkServiceDescriptor.setVld(new HashSet<>());
-                for (String link : connections) {
-                    VirtualLinkDescriptor vld = new VirtualLinkDescriptor();
-                    vld.setName(link);
-                    networkServiceDescriptor.getVld().add(vld);
-                }
-
-                logJson(networkServiceDescriptor, "/tmp/nsd.json");
-
-
-/*                NFVORequestor requestor = NfvoRequestorBuilder.create()
-                        .nfvoIp(nfvHost)
-                        .nfvoPort(nfvPort)
-                        .username(nfvUser)
-                        .password(nfvPassword)
-                        .projectName(projectId)
-                        .sslEnabled(nfvSslEnabled)
-                        .version("1")
-                        .build();*/
-/*
-                NetworkServiceDescriptor creationResponse = requestor.getNetworkServiceDescriptorAgent().create(networkServiceDescriptor);
-                return requestor.getNetworkServiceDescriptorAgent().findById(creationResponse.getId());
-*/              //response.setHeader("X-Header", "TEST");
-                return null;
-            } catch (HttpClientErrorException restex) {
-                switch (restex.getStatusCode()) {
-                    case NOT_FOUND:
-                        throw new ResponseStatusException(HttpStatus.NOT_FOUND, restex.getResponseBodyAsString());
-
-                    case BAD_REQUEST:
-                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, restex.getResponseBodyAsString());
-
-                    default:
-                        throw new ServerErrorException(restex.getStatusCode() + " " + restex.getResponseBodyAsString());
-                }
-
-            } catch (HttpServerErrorException restex) {
-                throw new ServerErrorException(restex.getStatusCode() + " " + restex.getResponseBodyAsString());
             }
 
+            LogWriter.logXml(result, "/tmp/nfvRespModified.xml");
+
+            for (Node node : result.getGraphs().getGraph().get(0).getNode()) {
+                VirtualNetworkFunctionDescriptor currentVnfd = networkServiceDescriptor.getVnfd().stream().filter(t -> t.getName().equals(node.getName())).findFirst().get();
+                //empty virtual link
+                currentVnfd.setVirtual_link(new HashSet<>());
+                //empty connection points
+                currentVnfd.getVdu().forEach(t -> t.getVnfc().forEach(l -> l.setConnection_point(new HashSet<>())));
+
+                for (Neighbour nodeNeighbour : node.getNeighbour()) {
+                    //add in alphabetical order to connections
+                    String vlink = node.getName().compareToIgnoreCase(nodeNeighbour.getName()) > 0 ? nodeNeighbour.getName() + node.getName() : node.getName() + nodeNeighbour.getName();
+                    connections.add(vlink);
+                    InternalVirtualLink vl = new InternalVirtualLink();
+                    vl.setName(vlink);
+                    currentVnfd.getVirtual_link().add(vl);
+                    VNFDConnectionPoint cp = new VNFDConnectionPoint();
+                    cp.setVirtual_link_reference(vlink);
+                    currentVnfd.getVdu().forEach(t -> t.getVnfc().forEach(l -> l.getConnection_point().add(cp)));
+                }
+            }
+
+            networkServiceDescriptor.setVld(new HashSet<>());
+            for (String link : connections) {
+                VirtualLinkDescriptor vld = new VirtualLinkDescriptor();
+                vld.setName(link);
+                networkServiceDescriptor.getVld().add(vld);
+            }
+
+            LogWriter.logJson(networkServiceDescriptor, "/tmp/nsd.json");
+
+
+            NFVORequestor requestor = NfvoRequestorBuilder.create()
+                    .nfvoIp(nfvHost)
+                    .nfvoPort(nfvPort)
+                    .username(nfvUser)
+                    .password(nfvPassword)
+                    .projectName(projectId)
+                    .sslEnabled(nfvSslEnabled)
+                    .version("1")
+                    .build();
+
+            NetworkServiceDescriptor creationResponse = requestor.getNetworkServiceDescriptorAgent().create(networkServiceDescriptor);
+            //return requestor.getNetworkServiceDescriptorAgent().findById(creationResponse.getId());
+            networkServiceDescriptor.setId(creationResponse.getId());
+            return networkServiceDescriptor;
+            //response.setHeader("X-Header", "TEST");
+        } catch (HttpClientErrorException restex) {
+            switch (restex.getStatusCode()) {
+                case NOT_FOUND:
+                    throw new ResponseStatusException(HttpStatus.NOT_FOUND, restex.getResponseBodyAsString());
+
+                case BAD_REQUEST:
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, restex.getResponseBodyAsString());
+
+                default:
+                    throw new ServerErrorException(restex.getStatusCode() + " " + restex.getResponseBodyAsString(), restex);
+            }
+
+        } catch (HttpServerErrorException restex) {
+            throw new ServerErrorException(restex.getStatusCode() + " " + restex.getResponseBodyAsString(), restex);
+        } catch (SDKException nfvoex) {
+            throw new ServerErrorException("Unable to perform operation on NFVO", nfvoex);
         } catch (BadFormatException e) {
             throw new BadRequestException(e.getMessage());
         }
-
     }
 
     /**
@@ -217,7 +210,7 @@ public class NetworkServiceDescriptorController {
      * @param id of Network Service Descriptor
      */
     @ApiOperation(
-            value = "Removing a Network Service Descriptor",
+            value = "Remove a Network Service Descriptor",
             notes = "DELETE request where the id in the url belongs to the NSD to delete")
     @RequestMapping(value = "{id}", method = RequestMethod.DELETE)
     @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -254,7 +247,7 @@ public class NetworkServiceDescriptorController {
             method = RequestMethod.POST,
             consumes = MediaType.APPLICATION_JSON_VALUE)
     @ApiOperation(
-            value = "Removing multiple Network Service Descriptors",
+            value = "Remove multiple Network Service Descriptors",
             notes = "Delete Request takes a list of Network Service Descriptor ids")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void multipleDelete(
@@ -340,7 +333,7 @@ public class NetworkServiceDescriptorController {
             throw new RuntimeException(e);
         }
 
-        NetworkServiceDescriptor nsd = null;//networkServiceDescriptorManagement.query(id, projectId);
+        NetworkServiceDescriptor nsd = null;
         try {
             nsd = requestor.getNetworkServiceDescriptorAgent().findById(id);
         } catch (SDKException e) {
@@ -390,31 +383,6 @@ public class NetworkServiceDescriptorController {
             e.printStackTrace();
             throw new RuntimeException(e);
         }
-        //networkServiceDescriptorManagement.update(networkServiceDescriptor, projectId);
     }
 
-    private void logXml(Object o, String path){
-        try {
-            final JAXBContext jaxbContext = JAXBContext.newInstance(o.getClass());
-            final Marshaller marshaller = jaxbContext.createMarshaller();
-            marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, Boolean.TRUE);
-            marshaller.marshal(o, new File(path));
-        } catch (JAXBException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void logJson(Object o, String path){
-        try {
-            Gson gson = new Gson();
-            String nfvJson = gson.toJson(o);
-            File outJson = new File(path);
-            FileOutputStream os = new FileOutputStream(outJson);
-            os.write(nfvJson.getBytes());
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
 }

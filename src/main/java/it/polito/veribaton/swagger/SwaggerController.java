@@ -1,4 +1,4 @@
-package it.polito.veribaton.api.swagger;
+package it.polito.veribaton.swagger;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
@@ -10,6 +10,7 @@ import springfox.documentation.annotations.ApiIgnore;
 import springfox.documentation.builders.ApiInfoBuilder;
 import springfox.documentation.builders.RequestHandlerSelectors;
 import springfox.documentation.service.ApiInfo;
+import springfox.documentation.service.Tag;
 import springfox.documentation.spi.DocumentationType;
 import springfox.documentation.spring.web.plugins.Docket;
 import springfox.documentation.swagger2.annotations.EnableSwagger2;
@@ -25,8 +26,9 @@ public class SwaggerController {
     public Docket veribaton() {
         return new Docket(DocumentationType.SWAGGER_2)
                 .apiInfo(apiInfo())
+                .tags(new Tag("Network Service Descriptors", "Network service descriptors management"))
                 .select()
-                .apis(RequestHandlerSelectors.basePackage("it.polito.veribaton"))
+                .apis(RequestHandlerSelectors.basePackage("it.polito.veribaton.api"))
                 .build();
     }
 
