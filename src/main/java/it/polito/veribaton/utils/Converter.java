@@ -13,18 +13,18 @@ import java.util.stream.Collectors;
 
 public class Converter {
 
-    public static NFV ETSIToVerifo(NetworkServiceDescriptor nsd) throws BadFormatException {
+    public static NFV ETSIToVerifo(NetworkServiceDescriptor nsd, Long id) throws BadFormatException {
 
         NFV nfv = new NFV();
         nfv.setGraphs(new Graphs());
-        nfv.setHosts(new Hosts());
-        nfv.setConnections(new Connections());
+        //nfv.setHosts(new Hosts());
+        //nfv.setConnections(new Connections());
         nfv.setPropertyDefinition(new PropertyDefinition());
         nfv.setConstraints(new Constraints());
         nfv.getConstraints().setNodeConstraints(new NodeConstraints());
-        nfv.getConstraints().setBandwidthConstraints(new BandwidthConstraints());
+        nfv.getConstraints().setLinkConstraints(new LinkConstraints());
         Graph graph = new Graph();
-        graph.setId((long) nsd.getName().hashCode());
+        graph.setId(id);
         HashMap<String, Set<String>> networks = new HashMap<String, Set<String>>();
         HashMap<String, Set<String>> adjMatrix = new HashMap<String, Set<String>>();
         HashSet<String> endhosts = new HashSet<String>();
@@ -36,6 +36,7 @@ public class Converter {
         }
 
         //create sink host where all vnfs will go
+        /*
         Host middlebox = new Host();
         middlebox.setName("middlebox");
         middlebox.setType(TypeOfHost.MIDDLEBOX);
@@ -45,11 +46,11 @@ public class Converter {
         middlebox.setDiskStorage(1000);
         middlebox.getSupportedVNF().addAll(getMiddleboxSupportedVNFs());
         nfv.getHosts().getHost().add(middlebox);
-
+        */
         for (VirtualNetworkFunctionDescriptor vnfd : nsd.getVnfd()) {
             Node vnf = new Node();
             adjMatrix.put(vnfd.getName(), new HashSet<>());
-            vnf.setId((long) vnfd.getName().hashCode());
+            //vnf.setId((long) vnfd.getName().hashCode());
             vnf.setName(vnfd.getName());
             vnf.setFunctionalType(FunctionalTypes.valueOf(vnfd.getType()));
             for (InternalVirtualLink vl : vnfd.getVirtual_link()) {
@@ -65,9 +66,48 @@ public class Converter {
             if (vnfdConf != null) {
                 if (vnfdConf.getName() != null) {
                     cfg.setName(vnfdConf.getName());
+                } else {
+                    cfg.setName("unnamed");
                 }
             } else {
                 cfg.setName("unnamed");
+            }
+
+            if (vnfdConf != null) {
+                if (vnfdConf.getConfigurationParameters() != null) {
+                    for (ConfigurationParameter vnfdConfP : vnfdConf.getConfigurationParameters()) {
+                        if (vnfdConfP.getConfKey().equals("optional")) {
+                            if (vnfdConfP.getValue().equalsIgnoreCase("true")) {
+                                NodeConstraints.NodeMetrics optional = new NodeConstraints.NodeMetrics();
+                                optional.setOptional(true);
+                                optional.setNode(vnf.getName());
+                                nfv.getConstraints().getNodeConstraints().getNodeMetrics().add(optional);
+                            }
+                            if (vnfdConfP.getValue().equalsIgnoreCase("false")) {
+                                NodeConstraints.NodeMetrics optional = new NodeConstraints.NodeMetrics();
+                                optional.setOptional(false);
+                                optional.setNode(vnf.getName());
+                                nfv.getConstraints().getNodeConstraints().getNodeMetrics().add(optional);
+                            }
+                        }
+                        if (vnfdConfP.getConfKey().equals("canReach")) {
+                            Property p = new Property();
+                            p.setGraph(graph.getId());
+                            p.setName(PName.REACHABILITY_PROPERTY);
+                            p.setSrc(vnf.getName());
+                            p.setDst(vnfdConfP.getValue());
+                            nfv.getPropertyDefinition().getProperty().add(p);
+                        }
+                        if (vnfdConfP.getConfKey().equals("cannotReach")) {
+                            Property p = new Property();
+                            p.setGraph(graph.getId());
+                            p.setName(PName.ISOLATION_PROPERTY);
+                            p.setSrc(vnf.getName());
+                            p.setDst(vnfdConfP.getValue());
+                            nfv.getPropertyDefinition().getProperty().add(p);
+                        }
+                    }
+                }
             }
 
             switch (vnf.getFunctionalType()) {
@@ -82,7 +122,7 @@ public class Converter {
                     if (vnfdConf != null) {
                         if (vnfdConf.getConfigurationParameters() != null) {
                             for (ConfigurationParameter vnfdConfP : vnfdConf.getConfigurationParameters()) {
-                                if (vnfdConfP.getConfKey().equals("source")) {
+                                if (vnfdConfP.getConfKey().startsWith("source")) {
                                     cfg.getNat().getSource().add(vnfdConfP.getValue());
                                 }
                             }
@@ -94,7 +134,7 @@ public class Converter {
                     break;
                 case ENDHOST:
                     cfg.setEndhost(new Endhost());
-                    endhosts.add(vnf.getName());
+                    //endhosts.add(vnf.getName());
                     break;
                 case VPNEXIT:
                     cfg.setVpnexit(new Vpnexit());
@@ -104,10 +144,27 @@ public class Converter {
                     break;
                 case FIREWALL:
                     cfg.setFirewall(new Firewall());
+                    if (vnfdConf != null) {
+                        if (vnfdConf.getConfigurationParameters() != null) {
+                            for (ConfigurationParameter vnfdConfP : vnfdConf.getConfigurationParameters()) {
+                                if (vnfdConfP.getConfKey().equals("defaultAction")) {
+                                    if (vnfdConfP.getValue().equalsIgnoreCase("allow")) {
+                                        cfg.getFirewall().setDefaultAction(ActionTypes.ALLOW);
+                                    }
+                                    if (vnfdConfP.getValue().equalsIgnoreCase("deny")) {
+                                        cfg.getFirewall().setDefaultAction(ActionTypes.DENY);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    /*
                     NodeConstraints.NodeMetrics optional = new NodeConstraints.NodeMetrics();
                     optional.setOptional(true);
                     optional.setNode(vnf.getName());
                     nfv.getConstraints().getNodeConstraints().getNodeMetrics().add(optional);
+                    */
                     break;
                 case VPNACCESS:
                     cfg.setVpnaccess(new Vpnaccess());
@@ -119,16 +176,12 @@ public class Converter {
                             for (ConfigurationParameter vnfdConfP : vnfdConf.getConfigurationParameters()) {
                                 if (vnfdConfP.getConfKey().equals("nameWebServer")) {
                                     cfg.getWebclient().setNameWebServer(vnfdConfP.getValue());
-                                    Property p = new Property();
-                                    p.setGraph(graph.getId());
-                                    p.setName(PName.REACHABILITY_PROPERTY);
-                                    p.setSrc(vnf.getName());
-                                    p.setDst(vnfdConfP.getValue());
-                                    nfv.getPropertyDefinition().getProperty().add(p);
+
                                 }
                             }
                         }
                     }
+                    /*
                     Host hc = new Host();
                     hc.setName("host-"+vnf.getName());
                     hc.setType(TypeOfHost.CLIENT);
@@ -144,10 +197,12 @@ public class Converter {
                     clientConn.setSourceHost(hc.getName());
                     clientConn.setDestHost(middlebox.getName());
                     nfv.getConnections().getConnection().add(clientConn);
+                    */
                     break;
                 case WEBSERVER:
                     cfg.setWebserver(new Webserver());
                     cfg.getWebserver().setName(vnfd.getName());
+                    /*
                     Host hs = new Host();
                     hs.setName("host-"+vnf.getName());
                     hs.setType(TypeOfHost.SERVER);
@@ -163,6 +218,7 @@ public class Converter {
                     serverConn.setSourceHost(middlebox.getName());
                     serverConn.setDestHost(hs.getName());
                     nfv.getConnections().getConnection().add(serverConn);
+                    */
                     break;
                 case MAILCLIENT:
                     cfg.setMailclient(new Mailclient());
@@ -180,6 +236,8 @@ public class Converter {
             }
 
             vnf.setConfiguration(cfg);
+            graph.getNode().add(vnf);
+            /*
             if (endhosts.size() > 1) {
                 for (String srcendhost : endhosts) {
                     for (String dstendhost : endhosts) {
@@ -193,8 +251,9 @@ public class Converter {
                     }
                 }
             }
+            */
 
-            graph.getNode().add(vnf);
+
         }
 
         //set adj matrix

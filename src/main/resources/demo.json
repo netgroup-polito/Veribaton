@@ -1,0 +1,227 @@
+{
+  "name": "verifoo",
+  "vendor": "polito",
+  "version": "docker",
+  "vld": [{
+    "name": "nodeAnode1"
+  },{
+    "name": "nodeCnode1"
+  },{
+    "name": "node1node2"
+  },{
+    "name": "node2nodeB"
+  }],
+  "vnfd": [
+    {
+      "name":"nodeA",
+      "vendor":"polito",
+      "version":"docker",
+      "deployment_flavour":[
+        {
+          "flavour_key":"m1.small"
+        }
+      ],
+      "vdu":[
+        {
+          "vm_image":["node:latest"],
+          "scale_in_out":3,
+          "vnfc":[
+            {
+              "connection_point":[
+                {
+                  "virtual_link_reference":"nodeAnode1"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "configurations": {
+        "configurationParameters": [{
+          "confKey":"nameWebServer",
+          "value":"nodeB"
+        },{
+          "confKey":"canReach",
+          "value":"nodeB"
+        }]
+      },
+      "virtual_link":[
+        {
+          "name":"nodeAnode1"
+        }
+      ],
+      "type":"WEBCLIENT",
+      "endpoint":"docker"
+    },
+    {
+      "name":"nodeC",
+      "vendor":"polito",
+      "version":"docker",
+      "vdu":[
+        {
+          "vm_image":["node:latest"],
+          "scale_in_out":3,
+          "vnfc":[
+            {
+              "connection_point":[
+                {
+                  "virtual_link_reference":"nodeCnode1"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "configurations": {
+        "configurationParameters": [{
+          "confKey":"nameWebServer",
+          "value":"nodeB"
+        },{
+          "confKey":"cannotReach",
+          "value":"nodeB"
+        }]
+      },
+      "deployment_flavour":[
+        {
+          "flavour_key":"m1.small"
+        }
+      ],
+      "virtual_link":[
+        {
+          "name":"nodeCnode1"
+        }
+      ],
+      "type":"WEBCLIENT",
+      "endpoint":"docker"
+    },
+    {
+      "name":"node1",
+      "vendor":"polito",
+      "version":"docker",
+      "vdu":[
+        {
+          "vm_image":["ddecaro/firewall:latest"],
+          "scale_in_out":3,
+          "vnfc":[
+            {
+              "connection_point":[
+                {
+                  "virtual_link_reference":"nodeAnode1"
+                },
+                {
+                  "virtual_link_reference":"nodeCnode1"
+                },
+                {
+                  "virtual_link_reference":"node1node2"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "configurations": {
+        "configurationParameters": [{
+          "confKey":"DROP",
+          "value":"nodeC,nodeB"
+        }]
+      },
+      "deployment_flavour":[
+        {
+          "flavour_key":"m1.small"
+        }
+      ],
+      "virtual_link":[
+        {
+          "name":"nodeAnode1"
+        },
+        {
+          "name":"nodeCnode1"
+        },
+        {
+          "name":"node1node2"
+        }
+      ],
+      "type":"FIREWALL",
+      "endpoint":"docker"
+    },
+    {
+      "name":"node2",
+      "vendor":"polito",
+      "version":"docker",
+      "vdu":[
+        {
+          "vm_image":["ddecaro/firewall:latest"],
+          "scale_in_out":3,
+          "vnfc":[
+            {
+              "connection_point":[
+                {
+                  "virtual_link_reference":"node1node2"
+                },
+                {
+                  "virtual_link_reference":"node2nodeB"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "configurations": {
+        "configurationParameters": [{
+          "confKey":"DROP",
+          "value":"nodeC,nodeB"
+        }, {
+          "confKey":"optional",
+          "value":"true"
+        }]
+      },
+      "deployment_flavour":[
+        {
+          "flavour_key":"m1.small"
+        }
+      ],
+      "virtual_link":[
+        {
+          "name":"node1node2"
+        },
+        {
+          "name": "node2nodeB"
+        }
+      ],
+      "type":"FIREWALL",
+      "endpoint":"docker"
+    },
+    {
+      "name":"nodeB",
+      "vendor":"polito",
+      "version":"docker",
+      "deployment_flavour":[
+        {
+          "flavour_key":"m1.small"
+        }
+      ],
+      "vdu":[
+        {
+          "vm_image":["nginx:latest"],
+          "scale_in_out":3,
+          "vnfc":[
+            {
+              "connection_point":[
+                {
+                  "virtual_link_reference":"node2nodeB"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "virtual_link":[
+        {
+          "name":"node2nodeB"
+        }
+      ],
+      "type":"WEBSERVER",
+      "endpoint":"docker"
+    }
+  ]
+}

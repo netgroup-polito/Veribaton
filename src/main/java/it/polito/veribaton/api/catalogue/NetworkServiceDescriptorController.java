@@ -36,6 +36,7 @@ import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerErrorException;
@@ -98,17 +99,19 @@ public class NetworkServiceDescriptorController {
 
         try {
 
-            NFV nfv = Converter.ETSIToVerifo(networkServiceDescriptor);
+            NFV nfv = Converter.ETSIToVerifo(networkServiceDescriptor, 0L);
 
-            LogWriter.logXml(nfv, "/tmp/nfv.xml");
+            log.info("Converted input JSON to verifoo format");
+            LogWriter.logXml(nfv, "log/nfv.xml");
 
             String uri = verifooScheme + "://" + verifooHost + ":" + verifooPort + verifooBaseUri + verifooDeploymentUri;
             RestTemplate restTemplate = new RestTemplate();
 
-
+            log.info("Contacting verifoo...");
             NFV result = restTemplate.postForObject(uri, nfv, NFV.class);
+            log.info("Verifoo response received");
 
-            LogWriter.logXml(result, "/tmp/nfvResp.xml");
+            LogWriter.logXml(result, "log/nfvResp.xml");
 
             HashSet<String> connections = new HashSet<String>();
 
@@ -117,6 +120,7 @@ public class NetworkServiceDescriptorController {
                         networkServiceDescriptor.getVnfd().remove(vnfd);
                     }
                 }*/
+              /*
             for (NodeConstraints.NodeMetrics nm : nfv.getConstraints().getNodeConstraints().getNodeMetrics()) {
                 if (nm.isOptional()) {
                     Host middlebox = nfv.getHosts().getHost().stream().filter(t -> t.getName().equals("middlebox")).findFirst().get();
@@ -135,8 +139,9 @@ public class NetworkServiceDescriptorController {
                     }
                 }
             }
+            */
 
-            LogWriter.logXml(result, "/tmp/nfvRespModified.xml");
+            LogWriter.logXml(result, "log/nfvRespModified.xml");
 
             for (Node node : result.getGraphs().getGraph().get(0).getNode()) {
                 VirtualNetworkFunctionDescriptor currentVnfd = networkServiceDescriptor.getVnfd().stream().filter(t -> t.getName().equals(node.getName())).findFirst().get();
@@ -165,9 +170,9 @@ public class NetworkServiceDescriptorController {
                 networkServiceDescriptor.getVld().add(vld);
             }
 
-            LogWriter.logJson(networkServiceDescriptor, "/tmp/nsd.json");
+            LogWriter.logJson(networkServiceDescriptor, "log/nsd.json");
 
-
+            log.info("Contacting Openbaton...");
             NFVORequestor requestor = NfvoRequestorBuilder.create()
                     .nfvoIp(nfvHost)
                     .nfvoPort(nfvPort)
@@ -179,9 +184,10 @@ public class NetworkServiceDescriptorController {
                     .build();
 
             NetworkServiceDescriptor creationResponse = requestor.getNetworkServiceDescriptorAgent().create(networkServiceDescriptor);
-            //return requestor.getNetworkServiceDescriptorAgent().findById(creationResponse.getId());
-            networkServiceDescriptor.setId(creationResponse.getId());
-            return networkServiceDescriptor;
+            log.info("Openbaton response received");
+            return requestor.getNetworkServiceDescriptorAgent().findById(creationResponse.getId());
+            //networkServiceDescriptor.setId(creationResponse.getId());
+            //return creationResponse;
             //response.setHeader("X-Header", "TEST");
         } catch (HttpClientErrorException restex) {
             switch (restex.getStatusCode()) {
@@ -197,6 +203,8 @@ public class NetworkServiceDescriptorController {
 
         } catch (HttpServerErrorException restex) {
             throw new ServerErrorException(restex.getStatusCode() + " " + restex.getResponseBodyAsString(), restex);
+        } catch (ResourceAccessException ioexc) {
+            throw new ServerErrorException(ioexc.getMessage(), ioexc);
         } catch (SDKException nfvoex) {
             throw new ServerErrorException("Unable to perform operation on NFVO", nfvoex);
         } catch (BadFormatException e) {

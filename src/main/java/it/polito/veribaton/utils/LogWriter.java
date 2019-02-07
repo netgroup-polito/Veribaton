@@ -16,6 +16,10 @@ public class LogWriter {
             Gson gson = new Gson();
             String nfvJson = gson.toJson(o);
             File outJson = new File(path);
+            if (outJson.getParentFile() != null) {
+                outJson.getParentFile().mkdirs();
+            }
+            outJson.createNewFile();
             FileOutputStream os = new FileOutputStream(outJson);
             os.write(nfvJson.getBytes());
         } catch (FileNotFoundException e) {
@@ -27,12 +31,18 @@ public class LogWriter {
 
     public static void logXml(Object o, String path){
         try {
+            File f = new File(path);
+            if (f.getParentFile() != null) {
+                f.getParentFile().mkdirs();
+            }
+            f.createNewFile();
             final JAXBContext jaxbContext = JAXBContext.newInstance(o.getClass());
             final Marshaller marshaller = jaxbContext.createMarshaller();
             marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, Boolean.TRUE);
-            marshaller.marshal(o, new File(path));
-        } catch (JAXBException e) {
+            marshaller.marshal(o, f);
+        } catch (JAXBException | IOException e) {
             e.printStackTrace();
+            return;
         }
     }
 }
