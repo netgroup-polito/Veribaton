@@ -1,10 +1,7 @@
 package it.polito.veribaton.utils;
 
 import it.polito.veribaton.model.*;
-import org.openbaton.catalogue.mano.descriptor.InternalVirtualLink;
-import org.openbaton.catalogue.mano.descriptor.NetworkServiceDescriptor;
-import org.openbaton.catalogue.mano.descriptor.VirtualLinkDescriptor;
-import org.openbaton.catalogue.mano.descriptor.VirtualNetworkFunctionDescriptor;
+import org.openbaton.catalogue.mano.descriptor.*;
 import org.openbaton.catalogue.nfvo.ConfigurationParameter;
 import org.openbaton.exceptions.BadFormatException;
 
@@ -159,12 +156,6 @@ public class Converter {
                         }
                     }
 
-                    /*
-                    NodeConstraints.NodeMetrics optional = new NodeConstraints.NodeMetrics();
-                    optional.setOptional(true);
-                    optional.setNode(vnf.getName());
-                    nfv.getConstraints().getNodeConstraints().getNodeMetrics().add(optional);
-                    */
                     break;
                 case VPNACCESS:
                     cfg.setVpnaccess(new Vpnaccess());
@@ -181,44 +172,12 @@ public class Converter {
                             }
                         }
                     }
-                    /*
-                    Host hc = new Host();
-                    hc.setName("host-"+vnf.getName());
-                    hc.setType(TypeOfHost.CLIENT);
-                    hc.setFixedEndpoint(vnf.getName());
-                    hc.setCores(2);
-                    hc.setCpu(2);
-                    hc.setMemory(2);
-                    hc.setDiskStorage(2);
-                    nfv.getHosts().getHost().add(hc);
 
-                    Connection clientConn = new Connection();
-                    clientConn.setAvgLatency(1);
-                    clientConn.setSourceHost(hc.getName());
-                    clientConn.setDestHost(middlebox.getName());
-                    nfv.getConnections().getConnection().add(clientConn);
-                    */
                     break;
                 case WEBSERVER:
                     cfg.setWebserver(new Webserver());
                     cfg.getWebserver().setName(vnfd.getName());
-                    /*
-                    Host hs = new Host();
-                    hs.setName("host-"+vnf.getName());
-                    hs.setType(TypeOfHost.SERVER);
-                    hs.setFixedEndpoint(vnf.getName());
-                    hs.setCores(2);
-                    hs.setCpu(2);
-                    hs.setMemory(2);
-                    hs.setDiskStorage(2);
-                    nfv.getHosts().getHost().add(hs);
 
-                    Connection serverConn = new Connection();
-                    serverConn.setAvgLatency(1);
-                    serverConn.setSourceHost(middlebox.getName());
-                    serverConn.setDestHost(hs.getName());
-                    nfv.getConnections().getConnection().add(serverConn);
-                    */
                     break;
                 case MAILCLIENT:
                     cfg.setMailclient(new Mailclient());
@@ -229,7 +188,9 @@ public class Converter {
                 case FIELDMODIFIER:
                     cfg.setFieldmodifier(new Fieldmodifier());
                     break;
-
+                case FORWARDER:
+                    cfg.setForwarder(new Forwarder());
+                    break;
                 default:
                     throw new BadFormatException("VNF type not supported");
 
@@ -237,21 +198,6 @@ public class Converter {
 
             vnf.setConfiguration(cfg);
             graph.getNode().add(vnf);
-            /*
-            if (endhosts.size() > 1) {
-                for (String srcendhost : endhosts) {
-                    for (String dstendhost : endhosts) {
-                        if (dstendhost != srcendhost) {
-                            Property p = new Property();
-                            p.setGraph(graph.getId());
-                            p.setName(PName.REACHABILITY_PROPERTY);
-                            p.setSrc(srcendhost);
-                            p.setDst(dstendhost);
-                        }
-                    }
-                }
-            }
-            */
 
 
         }
@@ -276,6 +222,104 @@ public class Converter {
         nfv.setParsingString("");
 
         return nfv;
+    }
+
+    public static NetworkServiceDescriptor VerifooToETSI(NetworkServiceDescriptor nsd, NFV nfv) throws BadFormatException {
+        //iterate over optional nodes
+        for (NodeConstraints.NodeMetrics nm : nfv.getConstraints().getNodeConstraints().getNodeMetrics()) {
+            if (nm.isOptional()) {
+                //if an optional node is not present in the list of nodes returned from verifoo then remove it from the nsd
+                if (!nfv.getGraphs().getGraph().get(0).getNode().stream().filter(t -> t.getName().equals(nm.getNode())).findFirst().isPresent()) {
+                    //find the specified node and remove it in etsi model
+                    nsd.getVnfd().removeIf(t -> t.getName().equals(nm.getNode()));
+                }
+            }
+        }
+
+        //remove networks and add a single vlink
+        nsd.setVld(new HashSet<>());
+        VirtualLinkDescriptor vld = new VirtualLinkDescriptor();
+        vld.setName("vlink");
+        nsd.getVld().add(vld);
+        for (Node node : nfv.getGraphs().getGraph().get(0).getNode()) {
+            VirtualNetworkFunctionDescriptor currentVnfd = nsd.getVnfd().stream().filter(t -> t.getName().equals(node.getName())).findFirst().get();
+            //empty virtual link
+            currentVnfd.setVirtual_link(new HashSet<>());
+            //empty connection points
+            currentVnfd.getVdu().forEach(t -> t.getVnfc().forEach(l -> l.setConnection_point(new HashSet<>())));
+
+            //create internal vl and add connection point to vdu
+            InternalVirtualLink vl = new InternalVirtualLink();
+            vl.setName("vlink");
+            currentVnfd.getVirtual_link().add(vl);
+            VNFDConnectionPoint cp = new VNFDConnectionPoint();
+            cp.setVirtual_link_reference("vlink");
+            currentVnfd.getVdu().forEach(t -> t.getVnfc().forEach(l -> l.getConnection_point().add(cp)));
+
+            //eventually create configuration objects
+            if (currentVnfd.getConfigurations() == null) {
+                currentVnfd.setConfigurations(new org.openbaton.catalogue.nfvo.Configuration());
+            }
+            if (currentVnfd.getConfigurations().getConfigurationParameters() == null) {
+                currentVnfd.getConfigurations().setConfigurationParameters(new HashSet<>());
+            }
+
+            //if firewall, configure it
+            switch (node.getFunctionalType()) {
+
+                case FIREWALL:
+                    Firewall fw = node.getConfiguration().getFirewall();
+                    //check if firewall is configured and import configuration into NSD
+                    if (fw != null) {
+                        if (fw.getDefaultAction() != null) {
+                            if (!getParamValue(currentVnfd.getConfigurations(), "defaultAction").isPresent()) {
+                                ConfigurationParameter defAction = new ConfigurationParameter();
+                                defAction.setConfKey("defaultAction");
+                                if (fw.getDefaultAction().equals(ActionTypes.ALLOW)){
+                                    defAction.setValue("allow");
+                                }
+                                if (fw.getDefaultAction().equals(ActionTypes.DENY)){
+                                    defAction.setValue("deny");
+                                }
+
+                                currentVnfd.getConfigurations().getConfigurationParameters().add(defAction);
+                            }
+                        }
+                        //autoconfig is not imported if fw config is not empty
+                        if (!getParamValue(currentVnfd.getConfigurations(), "allow").isPresent()) {
+                            if (!getParamValue(currentVnfd.getConfigurations(), "deny").isPresent()) {
+                                //build allow and deny strings as {src1},{dst1};{src2},{dst2}
+                                String allow = "", deny = "";
+                                for (Elements e : fw.getElements()) {
+                                    if (e.getAction().equals(ActionTypes.ALLOW)) {
+                                        if (!allow.isEmpty()) allow += ";";
+                                        allow += e.getSource()+","+e.getDestination();
+                                    }
+                                    if (e.getAction().equals(ActionTypes.DENY)) {
+                                        if (!deny.isEmpty()) deny += ";";
+                                        deny += e.getSource()+","+e.getDestination();
+                                    }
+                                }
+                                //add configuration parameters
+                                ConfigurationParameter allowPar = new ConfigurationParameter(), denyPar  = new ConfigurationParameter();
+                                allowPar.setConfKey("allow");
+                                allowPar.setValue(allow);
+                                denyPar.setConfKey("deny");
+                                denyPar.setValue(deny);
+
+                                currentVnfd.getConfigurations().getConfigurationParameters().add(allowPar);
+                                currentVnfd.getConfigurations().getConfigurationParameters().add(denyPar);
+                            }
+                        }
+                    }
+
+                    break;
+            }
+        }
+
+
+
+        return nsd;
     }
 
     private static List<SupportedVNFType> getMiddleboxSupportedVNFs() {
@@ -305,6 +349,15 @@ public class Converter {
         list.add(nat);
 
         return list;
+    }
+
+    private static Optional<String> getParamValue(org.openbaton.catalogue.nfvo.Configuration cfg, String name) {
+        if (cfg == null) return Optional.empty();
+        if (cfg.getConfigurationParameters() == null) return Optional.empty();
+        Optional<ConfigurationParameter> param = cfg.getConfigurationParameters().stream().filter(t->t.getConfKey().equals("name")).findFirst();
+        if (param.isPresent()) {
+            return Optional.of(param.get().getValue());
+        } else return Optional.empty();
     }
 }
 

@@ -49,6 +49,17 @@ The property `spring.autoconfigure.exclude=org.springframework.boot.autoconfigur
 $ ./gradlew bootRun
 ```
 
+## Usage
+When building network services, it is possible to customize the network service and vnf descriptors in order to have it reviewed and updated from Verifoo, other than validated.
+These are the guidelines of the interaction with Verifoo:
+- Each node must have the property "type", and it can have the values explicitated in the [list](#Type Values Domain) below.
+- Every node can be set as optional in order to Verifoo to remove it in case is not necessary for the service graph validity. This can be achieved using the configuration parameter "optional" set to "true".
+- Neighbors graph in verifoo is represented using networks in the NSD. If using a single network, Verifoo will receive a network mesh between nodes,
+otherwise will be considered neighbors between each other the nodes having an interface on the same network.
+- Different networks will be collapsed to a single one in Verifoo to NSD conversion, due to the missing implementation of the Service Function Chaining in Openbaton.
+- Firewalls can be autoconfigured: if the configuration is left empty, three different configuration parameters will be added: defaultAction (allow/deny), allow and deny.
+Allow and deny represent couples of source and destination node which communication the firewall should block or permit, and they are in the form: {src},{dest};{src2},{dest2}.
+
 ## Packages description
 
 #### it.polito.veribaton
@@ -73,5 +84,23 @@ Defines Openbaton data model.
 
 #### org.openbaton.exceptions
 Includes all possible exceptions that could happen from the point of view of the NFVO.
+
+----
+#### Type Values Domain
+- FIREWALL
+- ENDHOST
+- ENDPOINT
+- ANTISPAM
+- CACHE
+- DPI
+- MAILCLIENT
+- MAILSERVER
+- NAT
+- VPNACCESS
+- VPNEXIT
+- WEBCLIENT
+- WEBSERVER
+- FIELDMODIFIER
+- FORWARDER
 
 

@@ -18,6 +18,8 @@ package it.polito.veribaton.api.catalogue;
 
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
+import it.polito.veribaton.exceptions.InvalidGraphException;
+import it.polito.veribaton.exceptions.UnsatisfiedPropertyException;
 import it.polito.veribaton.model.*;
 import it.polito.veribaton.utils.Converter;
 import it.polito.veribaton.utils.LogWriter;
@@ -111,66 +113,17 @@ public class NetworkServiceDescriptorController {
             NFV result = restTemplate.postForObject(uri, nfv, NFV.class);
             log.info("Verifoo response received");
 
+            for (Property p : result.getPropertyDefinition().getProperty()) {
+                if (!p.isIsSat()) {
+                    throw new UnsatisfiedPropertyException(p.getName().value());
+                }
+            }
+
             LogWriter.logXml(result, "log/nfvResp.xml");
 
-            HashSet<String> connections = new HashSet<String>();
+            NetworkServiceDescriptor finalNSD = Converter.VerifooToETSI(networkServiceDescriptor, result);
 
-              /*  for (VirtualNetworkFunctionDescriptor vnfd : networkServiceDescriptor.getVnfd()) {
-                    if (!result.getGraphs().getGraph().get(0).getNode().stream().filter(t -> t.getName().equals(vnfd.getName())).findFirst().isPresent()) {
-                        networkServiceDescriptor.getVnfd().remove(vnfd);
-                    }
-                }*/
-              /*
-            for (NodeConstraints.NodeMetrics nm : nfv.getConstraints().getNodeConstraints().getNodeMetrics()) {
-                if (nm.isOptional()) {
-                    Host middlebox = nfv.getHosts().getHost().stream().filter(t -> t.getName().equals("middlebox")).findFirst().get();
-                    //if an optional node is not present in the list of nodes deployed on the middlebox then remove it
-                    if (!middlebox.getNodeRef().stream().filter(t -> t.getNode().equals(nm.getNode())).findFirst().isPresent()) {
-                        //find the specified node and remove it in etsi model
-                        networkServiceDescriptor.getVnfd().removeIf(t -> t.getName().equals(nm.getNode()));
-
-                        //find and remove it in verifoo definition
-                        result.getGraphs().getGraph().get(0).getNode().removeIf(t -> t.getName().equals(nm.getNode()));
-
-                        //find and remove it from node neighbours
-                        for (Node n : result.getGraphs().getGraph().get(0).getNode()) {
-                            n.getNeighbour().removeIf(t -> t.getName().equals(nm.getNode()));
-                        }
-                    }
-                }
-            }
-            */
-
-            LogWriter.logXml(result, "log/nfvRespModified.xml");
-
-            for (Node node : result.getGraphs().getGraph().get(0).getNode()) {
-                VirtualNetworkFunctionDescriptor currentVnfd = networkServiceDescriptor.getVnfd().stream().filter(t -> t.getName().equals(node.getName())).findFirst().get();
-                //empty virtual link
-                currentVnfd.setVirtual_link(new HashSet<>());
-                //empty connection points
-                currentVnfd.getVdu().forEach(t -> t.getVnfc().forEach(l -> l.setConnection_point(new HashSet<>())));
-
-                for (Neighbour nodeNeighbour : node.getNeighbour()) {
-                    //add in alphabetical order to connections
-                    String vlink = node.getName().compareToIgnoreCase(nodeNeighbour.getName()) > 0 ? nodeNeighbour.getName() + node.getName() : node.getName() + nodeNeighbour.getName();
-                    connections.add(vlink);
-                    InternalVirtualLink vl = new InternalVirtualLink();
-                    vl.setName(vlink);
-                    currentVnfd.getVirtual_link().add(vl);
-                    VNFDConnectionPoint cp = new VNFDConnectionPoint();
-                    cp.setVirtual_link_reference(vlink);
-                    currentVnfd.getVdu().forEach(t -> t.getVnfc().forEach(l -> l.getConnection_point().add(cp)));
-                }
-            }
-
-            networkServiceDescriptor.setVld(new HashSet<>());
-            for (String link : connections) {
-                VirtualLinkDescriptor vld = new VirtualLinkDescriptor();
-                vld.setName(link);
-                networkServiceDescriptor.getVld().add(vld);
-            }
-
-            LogWriter.logJson(networkServiceDescriptor, "log/nsd.json");
+            LogWriter.logJson(finalNSD, "log/nsd.json");
 
             log.info("Contacting Openbaton...");
             NFVORequestor requestor = NfvoRequestorBuilder.create()
@@ -183,7 +136,7 @@ public class NetworkServiceDescriptorController {
                     .version("1")
                     .build();
 
-            NetworkServiceDescriptor creationResponse = requestor.getNetworkServiceDescriptorAgent().create(networkServiceDescriptor);
+            NetworkServiceDescriptor creationResponse = requestor.getNetworkServiceDescriptorAgent().create(finalNSD);
             log.info("Openbaton response received");
             return requestor.getNetworkServiceDescriptorAgent().findById(creationResponse.getId());
             //networkServiceDescriptor.setId(creationResponse.getId());
@@ -200,7 +153,6 @@ public class NetworkServiceDescriptorController {
                 default:
                     throw new ServerErrorException(restex.getStatusCode() + " " + restex.getResponseBodyAsString(), restex);
             }
-
         } catch (HttpServerErrorException restex) {
             throw new ServerErrorException(restex.getStatusCode() + " " + restex.getResponseBodyAsString(), restex);
         } catch (ResourceAccessException ioexc) {
@@ -209,6 +161,8 @@ public class NetworkServiceDescriptorController {
             throw new ServerErrorException("Unable to perform operation on NFVO", nfvoex);
         } catch (BadFormatException e) {
             throw new BadRequestException(e.getMessage());
+        } catch (UnsatisfiedPropertyException e) {
+            throw new BadRequestException(new InvalidGraphException(e));
         }
     }
 
