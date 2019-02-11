@@ -7,11 +7,12 @@ The service is available through its REST API. To interact with operations avail
 
 `http://[veribaton_host]:[veribaton_port]/swagger`
 
-In case default parameters have not been changed, the swagger documentation can be reached atç
+The variable `veribaton_host` corresponds to the IP address of the server running the instance, while `veribaton_port` corresponds to the value of the variable `server.port` in application properties, as documented [below](#Install from sources).
+In case default parameters have not been changed, and the service is being accessed locally, the swagger documentation can be reached at:
 
 `http://locahlhost:9090/swagger`
 
-##### Network Service Descriptors API
+### Network Service Descriptors API
 
 Using the NSD API is possible to query, create, update and delete NS descriptors. Newly created descriptors will be handled through integration with Verifoo and therefore validated before upload to catalog.
 
@@ -43,7 +44,7 @@ $ git clone https://gitlab.com/raerith/veribaton/
 $ cd veribaton/src/main/resources
 $ vi application.properties
 ```
-Editable properties:
+###### Editable properties:
 
 | **Property**      | Description   | Default value|
 | ------------- |:-------------:| -----:|
@@ -66,7 +67,7 @@ The property `spring.autoconfigure.exclude=org.springframework.boot.autoconfigur
 $ ./gradlew bootRun
 ```
 
-## Usage
+## Usage Notes
 When building network services, it is possible to customize the network service and vnf descriptors in order to have it reviewed and updated from Verifoo, other than validated.
 These are the guidelines of the interaction with Verifoo:
 - Each node must have the property "type", and it can have the values explicitated in the [list](#Type Values Domain) below.
@@ -77,10 +78,14 @@ otherwise will be considered neighbors between each other the nodes having an in
 - Firewalls can be autoconfigured: if the configuration is left empty, three different configuration parameters will be added: defaultAction (allow/deny), allow and deny.
 Allow and deny represent couples of source and destination node which communication the firewall should block or permit, and they are in the form: {src},{dest};{src2},{dest2}.
 
-## Packages description
+## Contribution
+In order to contribute to the project, it is possible to clone the repository from sources as described in installation steps.
+The source code resides in folder `/src/main/java`. Follows a description of the different packages in which is detailed the class relationship between components.
+
+### Packages description
 
 #### it.polito.veribaton
-The main class is `Application.java`. Takes care of starting up the tomcat embedded server and registering hooks for soft shutdown.
+The main class is `Application.java`. Takes care of starting up the tomcat embedded server and registering controllers and hooks for soft shutdown.
  
 #### it.polito.veribaton.api.catalogue
 Implements the API interface for Network Service Descriptor. The controller class is `NetworkServiceDescriptorController.java`, which handles requests for Network Services CRUD operations.
