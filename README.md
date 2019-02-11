@@ -17,9 +17,11 @@ Using the NSD API is possible to query, create, update and delete NS descriptors
 
 An example of catalog upload can be achieved through this HTTP call:
 
-`POST http://locahlhost:9090/ns-descriptors
+```
+ POST http://locahlhost:9090/ns-descriptors
  project-id: default
- Content-Type: application/json`
+ Content-Type: application/json
+```
  
  The example request body can be found under src/main/resources/demo.json.
 
