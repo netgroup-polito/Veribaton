@@ -5,8 +5,23 @@ Veribaton is a java Spring Boot service exposing a subset of [Openbaton](http://
 ## Usage
 The service is available through its REST API. To interact with operations available and their documentation it is possible to access the following URL:
 
-`http:[veribaton_hostbaton]:[veribaton_port]/swagger`
+`http://[veribaton_host]:[veribaton_port]/swagger`
 
+In case default parameters have not been changed, the swagger documentation can be reached atç
+
+`http://locahlhost:9090/swagger`
+
+##### Network Service Descriptors API
+
+Using the NSD API is possible to query, create, update and delete NS descriptors. Newly created descriptors will be handled through integration with Verifoo and therefore validated before upload to catalog.
+
+An example of catalog upload can be achieved through this HTTP call:
+
+`POST http://locahlhost:9090/ns-descriptors
+ project-id: default
+ Content-Type: application/json`
+ 
+ The example request body can be found under src/main/resources/demo.json.
 
 ## Installation
 Veribaton requires Java version 1.8 or higher, a release of Verifoo after January 2018 and Openbaton >= 5.0.0 to run properly.
