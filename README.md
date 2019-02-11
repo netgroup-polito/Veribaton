@@ -7,7 +7,7 @@ The service is available through its REST API. To interact with operations avail
 
 `http://[veribaton_host]:[veribaton_port]/swagger`
 
-The variable `veribaton_host` corresponds to the IP address of the server running the instance, while `veribaton_port` corresponds to the value of the variable `server.port` in application properties, as documented [below](#Install from sources).
+The variable `veribaton_host` corresponds to the IP address of the server running the instance, while `veribaton_port` corresponds to the value of the variable `server.port` in application properties, as documented [below](#editable-properties).
 In case default parameters have not been changed, and the service is being accessed locally, the swagger documentation can be reached at:
 
 `http://locahlhost:9090/swagger`
@@ -44,7 +44,7 @@ $ git clone https://gitlab.com/raerith/veribaton/
 $ cd veribaton/src/main/resources
 $ vi application.properties
 ```
-###### Editable properties:
+###### <a name="editable-properties"></a> Editable properties:
 
 | **Property**      | Description   | Default value|
 | ------------- |:-------------:| -----:|
@@ -70,7 +70,7 @@ $ ./gradlew bootRun
 ## Usage Notes
 When building network services, it is possible to customize the network service and vnf descriptors in order to have it reviewed and updated from Verifoo, other than validated.
 These are the guidelines of the interaction with Verifoo:
-- Each node must have the property "type", and it can have the values explicitated in the [list](#Type Values Domain) below.
+- Each node must have the property "type", and it can have the values explicitated in the [list](#types) below.
 - Every node can be set as optional in order to Verifoo to remove it in case is not necessary for the service graph validity. This can be achieved using the configuration parameter "optional" set to "true".
 - Neighbors graph in verifoo is represented using networks in the NSD. If using a single network, Verifoo will receive a network mesh between nodes,
 otherwise will be considered neighbors between each other the nodes having an interface on the same network.
@@ -80,7 +80,9 @@ Allow and deny represent couples of source and destination node which communicat
 
 ## Contribution
 In order to contribute to the project, it is possible to clone the repository from sources as described in installation steps.
-The source code resides in folder `/src/main/java`. Follows a description of the different packages in which is detailed the class relationship between components.
+The source code resides in folder `/src/main/java`. 
+The project files are in the IntelliJ IDEA format, but given the nature of Spring Boot framework, any editor can be used to contribute.
+Follows a description of the different packages in which is detailed the class relationship between components.
 
 ### Packages description
 
@@ -108,7 +110,7 @@ Defines Openbaton data model.
 Includes all possible exceptions that could happen from the point of view of the NFVO.
 
 ----
-#### Type Values Domain
+#### <a name="types"></a> Type Values Domain
 - FIREWALL
 - ENDHOST
 - ENDPOINT
