@@ -263,7 +263,7 @@ public class NetworkServiceDescriptorController {
             value = "Get all NSDs from a project",
             notes =
                     "Returns all Network Service Descriptors onboarded in the project with the specified id")
-    @RequestMapping(method = RequestMethod.GET)
+    @RequestMapping(method = RequestMethod.GET, produces = MediaType.APPLICATION_JSON_VALUE)
     public List<NetworkServiceDescriptor> findAll(
             @RequestHeader(value = "project-id") String projectId) {
         try {
@@ -297,7 +297,7 @@ public class NetworkServiceDescriptorController {
     @ApiOperation(
             value = "Get Network Service Descriptor by id",
             notes = "Returns the Network Service Descriptor with the id in the URL")
-    @RequestMapping(value = "{id}", method = RequestMethod.GET)
+    @RequestMapping(value = "{id}", method = RequestMethod.GET, produces = MediaType.APPLICATION_JSON_VALUE)
     public NetworkServiceDescriptor findById(
             @PathVariable("id") String id, @RequestHeader(value = "project-id") String projectId)
             throws NotFoundException {
