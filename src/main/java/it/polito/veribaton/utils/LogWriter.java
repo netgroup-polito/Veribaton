@@ -10,7 +10,17 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 
+/**
+ * LogWriter is a utility class for logging XML and JSON objects to file
+ */
 public class LogWriter {
+
+    /**
+     * Writes JSON object to file. If the file is not empty, it will be overwritten
+     *
+     * @param o    the object to be written
+     * @param path the filesystem path for the log file
+     */
     public static void logJson(Object o, String path){
         try {
             Gson gson = new Gson();
@@ -29,6 +39,12 @@ public class LogWriter {
         }
     }
 
+    /**
+     * Writes XML object to file. If the file is not empty, it will be overwritten
+     *
+     * @param o    the object to be written
+     * @param path the filesystem path for the logfile
+     */
     public static void logXml(Object o, String path){
         try {
             File f = new File(path);
@@ -42,7 +58,6 @@ public class LogWriter {
             marshaller.marshal(o, f);
         } catch (JAXBException | IOException e) {
             e.printStackTrace();
-            return;
         }
     }
 }

@@ -20,10 +20,11 @@ import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import it.polito.veribaton.exceptions.InvalidGraphException;
 import it.polito.veribaton.exceptions.UnsatisfiedPropertyException;
-import it.polito.veribaton.model.*;
+import it.polito.veribaton.model.NFV;
+import it.polito.veribaton.model.Property;
 import it.polito.veribaton.utils.Converter;
 import it.polito.veribaton.utils.LogWriter;
-import org.openbaton.catalogue.mano.descriptor.*;
+import org.openbaton.catalogue.mano.descriptor.NetworkServiceDescriptor;
 import org.openbaton.exceptions.BadFormatException;
 import org.openbaton.exceptions.BadRequestException;
 import org.openbaton.exceptions.NotFoundException;
@@ -45,10 +46,12 @@ import org.springframework.web.server.ServerErrorException;
 
 import javax.servlet.http.HttpServletResponse;
 import javax.validation.Valid;
-import java.util.HashSet;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
 
+/**
+ * NetworkServiceDescriptorController is the class handling requests related to Netowrk Service lifecycle.
+ * All requests receive the header 'project' as a reference to the Openbaton top hierarchy element
+ */
 @RestController
 @RequestMapping("/ns-descriptors")
 @Api(tags = "Network Service Descriptors")
@@ -100,32 +103,39 @@ public class NetworkServiceDescriptorController {
         log.trace("Just Received: " + networkServiceDescriptor);
 
         try {
-
-            NFV nfv = Converter.ETSIToVerifo(networkServiceDescriptor, 0L);
+            //convert the input received in openbaton form to verifoo XML
+            NFV nfv = Converter.ETSIToVerifo(networkServiceDescriptor);
 
             log.info("Converted input JSON to verifoo format");
             LogWriter.logXml(nfv, "log/nfv.xml");
 
+            //build verifoo deployment URL
             String uri = verifooScheme + "://" + verifooHost + ":" + verifooPort + verifooBaseUri + verifooDeploymentUri;
             RestTemplate restTemplate = new RestTemplate();
 
             log.info("Contacting verifoo...");
+            //post NFV object to verifoo deployment service endpoint
             NFV result = restTemplate.postForObject(uri, nfv, NFV.class);
             log.info("Verifoo response received");
 
-            for (Property p : result.getPropertyDefinition().getProperty()) {
-                if (!p.isIsSat()) {
-                    throw new UnsatisfiedPropertyException(p.getName().value());
+            //upon response, if any property is not satisfied throw exception
+            if (result.getPropertyDefinition() != null) {
+                for (Property p : result.getPropertyDefinition().getProperty()) {
+                    if (!p.isIsSat()) {
+                        throw new UnsatisfiedPropertyException(p.getName().value());
+                    }
                 }
             }
 
             LogWriter.logXml(result, "log/nfvResp.xml");
 
+            //convert back verifoo format into openbaton for catalog upload
             NetworkServiceDescriptor finalNSD = Converter.VerifooToETSI(networkServiceDescriptor, result);
 
             LogWriter.logJson(finalNSD, "log/nsd.json");
 
             log.info("Contacting Openbaton...");
+            //create openbaton client
             NFVORequestor requestor = NfvoRequestorBuilder.create()
                     .nfvoIp(nfvHost)
                     .nfvoPort(nfvPort)
@@ -136,32 +146,40 @@ public class NetworkServiceDescriptorController {
                     .version("1")
                     .build();
 
+            //upload NSD in openbaton catalog
             NetworkServiceDescriptor creationResponse = requestor.getNetworkServiceDescriptorAgent().create(finalNSD);
             log.info("Openbaton response received");
+
+            //return the newly created descriptor
             return requestor.getNetworkServiceDescriptorAgent().findById(creationResponse.getId());
-            //networkServiceDescriptor.setId(creationResponse.getId());
-            //return creationResponse;
-            //response.setHeader("X-Header", "TEST");
-        } catch (HttpClientErrorException restex) {
-            switch (restex.getStatusCode()) {
-                case NOT_FOUND:
-                    throw new ResponseStatusException(HttpStatus.NOT_FOUND, restex.getResponseBodyAsString());
 
-                case BAD_REQUEST:
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, restex.getResponseBodyAsString());
-
-                default:
-                    throw new ServerErrorException(restex.getStatusCode() + " " + restex.getResponseBodyAsString(), restex);
+        }
+        //handle verifoo http client errors
+        catch (HttpClientErrorException restex) {
+            if (restex.getStatusCode() == HttpStatus.BAD_REQUEST) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, restex.getResponseBodyAsString());
+                //otherwise throu a server error
             }
-        } catch (HttpServerErrorException restex) {
             throw new ServerErrorException(restex.getStatusCode() + " " + restex.getResponseBodyAsString(), restex);
-        } catch (ResourceAccessException ioexc) {
+        }
+        // handle connection issues for http client such as conn refused
+        catch (HttpServerErrorException restex) {
+            throw new ServerErrorException(restex.getStatusCode() + " " + restex.getResponseBodyAsString(), restex);
+        }
+        // handle io exceptions for resource access
+        catch (ResourceAccessException ioexc) {
             throw new ServerErrorException(ioexc.getMessage(), ioexc);
-        } catch (SDKException nfvoex) {
+        }
+        // handle errors coming from Openbaton connection
+        catch (SDKException nfvoex) {
             throw new ServerErrorException("Unable to perform operation on NFVO", nfvoex);
-        } catch (BadFormatException e) {
+        }
+        // catch openbaton format errors
+        catch (BadFormatException e) {
             throw new BadRequestException(e.getMessage());
-        } catch (UnsatisfiedPropertyException e) {
+        }
+        // handle invalid graph properties
+        catch (UnsatisfiedPropertyException e) {
             throw new BadRequestException(new InvalidGraphException(e));
         }
     }
@@ -179,6 +197,7 @@ public class NetworkServiceDescriptorController {
     public void delete(
             @PathVariable("id") String id, @RequestHeader(value = "project-id") String projectId) {
         try {
+            // open Openbaton connection
             NFVORequestor requestor = NfvoRequestorBuilder.create()
                     .nfvoIp(nfvHost)
                     .nfvoPort(nfvPort)
@@ -189,11 +208,12 @@ public class NetworkServiceDescriptorController {
                     .version("1")
                     .build();
 
-
+            //request a delete on specified ID
             requestor.getNetworkServiceDescriptorAgent().delete(id);
-        } catch (SDKException e) {
-            e.printStackTrace();
-            throw new RuntimeException(e);
+        }
+        // catch Openbaton errors
+        catch (SDKException e) {
+            throw new ServerErrorException("Unable to perform operation on NFVO", e);
         }
     }
 
@@ -201,8 +221,6 @@ public class NetworkServiceDescriptorController {
      * Removes a list Network Service Descriptor from the NSDs Repository
      *
      * @param ids: the list of the ids
-     * @throws InterruptedException
-     * @throws ExecutionException
      */
     @RequestMapping(
             value = "/multipledelete",
@@ -216,6 +234,7 @@ public class NetworkServiceDescriptorController {
             @RequestBody @Valid List<String> ids, @RequestHeader(value = "project-id") String projectId) {
 
         try {
+            // open Openbaton connection
             NFVORequestor requestor = NfvoRequestorBuilder.create()
                     .nfvoIp(nfvHost)
                     .nfvoPort(nfvPort)
@@ -226,16 +245,17 @@ public class NetworkServiceDescriptorController {
                     .version("1")
                     .build();
 
-
+            //request a delete on specified IDs
             for (String id : ids) requestor.getNetworkServiceDescriptorAgent().delete(id);
-        } catch (SDKException e) {
-            e.printStackTrace();
-            throw new RuntimeException(e);
+        }
+        // catch Openbaton errors
+        catch (SDKException e) {
+            throw new ServerErrorException("Unable to perform operation on NFVO", e);
         }
     }
 
     /**
-     * This operation returns the list of Network Service Descriptor (NSD)
+     * This operation returns the list of Network Service Descriptors (NSD)
      *
      * @return List<NetworkServiceDescriptor>: the list of Network Service Descriptor stored
      */
@@ -247,6 +267,7 @@ public class NetworkServiceDescriptorController {
     public List<NetworkServiceDescriptor> findAll(
             @RequestHeader(value = "project-id") String projectId) {
         try {
+            // open Openbaton connection from client
             NFVORequestor requestor = NfvoRequestorBuilder.create()
                     .nfvoIp(nfvHost)
                     .nfvoPort(nfvPort)
@@ -257,11 +278,13 @@ public class NetworkServiceDescriptorController {
                     .version("1")
                     .build();
 
+            //get all NSDs and return them
             return requestor.getNetworkServiceDescriptorAgent().findAll();
 
-        } catch (SDKException e) {
-            e.printStackTrace();
-            throw new RuntimeException(e);
+        }
+        // catch Openbaton errors
+        catch (SDKException e) {
+            throw new ServerErrorException("Unable to perform operation on NFVO", e);
         }
     }
 
@@ -280,6 +303,7 @@ public class NetworkServiceDescriptorController {
             throws NotFoundException {
         NFVORequestor requestor;
         try {
+            // open Openbaton connection from client
             requestor = NfvoRequestorBuilder.create()
                     .nfvoIp(nfvHost)
                     .nfvoPort(nfvPort)
@@ -290,17 +314,20 @@ public class NetworkServiceDescriptorController {
                     .version("1")
                     .build();
 
-        } catch (SDKException e) {
-            e.printStackTrace();
-            throw new RuntimeException(e);
+        }
+        //catch connection problems
+        catch (SDKException e) {
+            throw new ServerErrorException("Unable to perform operation on NFVO", e);
         }
 
         NetworkServiceDescriptor nsd = null;
         try {
+            //find specified id
             nsd = requestor.getNetworkServiceDescriptorAgent().findById(id);
         } catch (SDKException e) {
             e.printStackTrace();
         }
+        //if nothing is found return 404
         if (nsd == null)
             throw new NotFoundException("Did not find a Network Service Descriptor with ID " + id);
         return nsd;
@@ -329,6 +356,7 @@ public class NetworkServiceDescriptorController {
             @RequestHeader(value = "project-id") String projectId) {
 
         try {
+            //open connection to Openbaton
             NFVORequestor requestor = NfvoRequestorBuilder.create()
                     .nfvoIp(nfvHost)
                     .nfvoPort(nfvPort)
@@ -339,12 +367,13 @@ public class NetworkServiceDescriptorController {
                     .version("1")
                     .build();
 
+            //request NSD update
             return requestor.getNetworkServiceDescriptorAgent().update(networkServiceDescriptor, id);
 
-        } catch (SDKException e) {
-            e.printStackTrace();
-            throw new RuntimeException(e);
+        }
+        // catch Openbaton errors
+        catch (SDKException e) {
+            throw new ServerErrorException("Unable to perform operation on NFVO", e);
         }
     }
-
 }

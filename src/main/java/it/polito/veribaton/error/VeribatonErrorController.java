@@ -13,6 +13,10 @@ import org.springframework.web.context.request.WebRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.util.Map;
 
+/**
+ * VeribatonErrorController takes care of error handling
+ * Inserts in error response the JSON
+ */
 @Controller
 public class VeribatonErrorController implements ErrorController {
 

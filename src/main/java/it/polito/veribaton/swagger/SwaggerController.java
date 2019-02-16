@@ -15,6 +15,9 @@ import springfox.documentation.spi.DocumentationType;
 import springfox.documentation.spring.web.plugins.Docket;
 import springfox.documentation.swagger2.annotations.EnableSwagger2;
 
+/**
+ * SwaggerController handles requests to swagger documentation.
+ */
 @Controller
 @EnableSwagger2
 @Configuration
@@ -32,6 +35,12 @@ public class SwaggerController {
                 .build();
     }
 
+
+    /**
+     * apiInfo returns documentation information for use in building swagger
+     *
+     * @return ApiInfo with title, version and description
+     */
     private ApiInfo apiInfo() {
         return new ApiInfoBuilder()
                 .title("Veribaton REST API")
@@ -40,6 +49,11 @@ public class SwaggerController {
                 .build();
     }
 
+    /**
+     * home redirects requests to /swagger path to /swagger-ui.html
+     *
+     * @return "redirect:/swagger-ui.html"
+     */
     @ApiIgnore
     @RequestMapping("/swagger")
     public String home() {

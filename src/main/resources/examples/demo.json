@@ -145,7 +145,7 @@
         }
       ],
       "configurations": {
-        "name":"conf1",
+        "name": "conf1",
         "configurationParameters": [
           {
             "confKey": "defaultAction",
