@@ -136,7 +136,7 @@ Includes all possible exceptions that could happen from the point of view of the
 - FIELDMODIFIER
 - FORWARDER
 
-## <a name="editable-properties"></a>Environment Setup
+## <a name="env"></a>Environment Setup
 #### Verifoo
 This guide describes installation and setup of Verifoo 2.0 on a Ubuntu Linux 18.04LTS system.
 Requirements are JDK >= 8, and Tomcat >= 8.5
