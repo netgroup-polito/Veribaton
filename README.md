@@ -207,6 +207,8 @@ $ cd verifoo
 $ ant start-tomcat &
 ```
 
+- Verifoo can be accessed at `http://localhost:8080/verifoo` if deployment completed successfully.
+
 #### Openbaton
 This guide describes installation and setup of Openbaton 6.0.0 on a Ubuntu Linux 18.04LTS system.
 The preferred installation method for this tool is via Docker containers, hence the need of installing docker on the system.
