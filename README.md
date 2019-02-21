@@ -84,6 +84,13 @@ Allow and deny represent couples of source and destination node which communicat
 In order to contribute to the project, it is possible to clone the repository from sources as described in installation steps.
 The source code resides in folder `/src/main/java`. 
 The project files are in the IntelliJ IDEA format, but given the nature of Spring Boot framework, any editor can be used to contribute.
+
+### Contribution guide
+- _**Modifying ETSI/Verifoo conversion:**_ The conversion logic can be modified adapting the two static methods `Converter.NFV ETSIToVerifo` and `Converter.VerifooToETSI` under package `it.polito.veribaton.utils`.
+- _**Extending Openbaton REST API compatibility:**_ In order to extend the compatibility surface between Veribaton and Openbaton REST interfaces, is possible to implement other controllers under package `it.polito.veribaton.api`. 
+These controllers should implement Openbaton endpoints.
+- _**Adapting Verifoo XSD:**_ In the event of a schema change in Verifoo data model, it is possible to implement the new XSD by copying it under the folder `src\main\resources` and perform a `gradle clean`. On subsequent builds, NFV classes will be generated from the ant XJC task.
+
 Follows a description of the different packages in which is detailed the class relationship between components.
 
 ### Packages description
