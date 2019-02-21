@@ -77,8 +77,8 @@ These are the guidelines of the interaction with Verifoo:
 - Neighbors graph in verifoo is represented using networks in the NSD. If using a single network, Verifoo will receive a network mesh between nodes,
 otherwise will be considered neighbors between each other the nodes having an interface on the same network.
 - Different networks will be collapsed to a single one in Verifoo to NSD conversion, due to the missing implementation of the Service Function Chaining in Openbaton.
-- Firewalls can be autoconfigured: if the configuration is left empty, three different configuration parameters will be added: defaultAction (allow/deny), allow and deny.
-Allow and deny represent couples of source and destination node which communication the firewall should block or permit, and they are in the form: {src},{dest};{src2},{dest2}.
+- Firewalls can be autoconfigured: if the configuration is left empty, three different configuration parameters will be added: `defaultAction` (allow/deny), `allow` and `deny`.
+Allow and deny variables represent couples of source and destination node which communication the firewall should block or permit, and they are in the form: {src},{dest};{src2},{dest2}.
 
 ## Contributing
 In order to contribute to the project, it is possible to clone the repository from sources as described in installation steps.
