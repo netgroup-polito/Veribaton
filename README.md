@@ -27,12 +27,14 @@ An example of catalog upload can be achieved through this HTTP call:
  The example request body can be found under src/main/resources/demo.json.
 
 ## Installation
-Veribaton requires Java version 1.8 or higher, a release of Verifoo after January 2018 and Openbaton >= 5.0.0 to run properly.
+Veribaton requires Java version 1.8 or higher, a release of Verifoo after January 2018 and Openbaton >= 6.0.0 to run properly.
 
 ##### Prerequisites
  - Download and install Java as described in Oracle Java [instruction page](https://www.java.com/en/download/help/download_options.xml)
  - Download and install the latest release of Verifoo from [here](https://github.com/netgroup-polito/verifoo)
  - Install Openbaton using [instructions](https://openbaton.github.io/documentation/nfvo-installation/)
+ 
+ Details about environment setup will be addressed [below](#env).
 
 ##### Install from sources
 - Clone this repository in a directory of choice:
@@ -78,7 +80,7 @@ otherwise will be considered neighbors between each other the nodes having an in
 - Firewalls can be autoconfigured: if the configuration is left empty, three different configuration parameters will be added: defaultAction (allow/deny), allow and deny.
 Allow and deny represent couples of source and destination node which communication the firewall should block or permit, and they are in the form: {src},{dest};{src2},{dest2}.
 
-## Contribution
+## Contributing
 In order to contribute to the project, it is possible to clone the repository from sources as described in installation steps.
 The source code resides in folder `/src/main/java`. 
 The project files are in the IntelliJ IDEA format, but given the nature of Spring Boot framework, any editor can be used to contribute.
@@ -127,4 +129,123 @@ Includes all possible exceptions that could happen from the point of view of the
 - FIELDMODIFIER
 - FORWARDER
 
+## <a name="editable-properties"></a>Environment Setup
+#### Verifoo
+This guide describes installation and setup of Verifoo 2.0 on a Ubuntu Linux 18.04LTS system.
+Requirements are JDK >= 8, and Tomcat >= 8.5
 
+- Install JDK 8 and required packages
+
+```sh
+$ sudo apt update
+$ sudo apt-get install -y openjdk-8-jdk\
+                        unzip wget ant
+```
+
+- Download tomcat 8.5.37
+```sh
+$ cd /tmp
+$ wget http://www-us.apache.org/dist/tomcat/tomcat-8/v8.5.37/bin/apache-tomcat-8.5.37.zip
+```
+
+- Install Tomcat
+```sh
+$ unzip apache-tomcat-*.zip
+$ sudo mkdir -p $HOME/tomcat
+$ sudo mv apache-tomcat-8.5.37 $HOME/tomcat
+$ sudo ln -s $HOME/tomcat/apache-tomcat-8.5.37 $HOME/tomcat/latest
+$ chmod +x -R $HOME/tomcat/latest/bin
+```
+
+- Set tomcat home
+```sh
+# set tomcat home
+$ sudo bash -c 'echo "export CATALINA_HOME=$HOME/tomcat/latest" >> $HOME/.profile'
+$ source $HOME/.profile
+```
+
+- Create Tomcat users as required from Verifoo
+```sh
+$ sudo bash -c ' cat << \EOF > $HOME/tomcat/latest/conf/tomcat-users.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<tomcat-users xmlns="http://tomcat.apache.org/xml"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="http://tomcat.apache.org/xml tomcat-users.xsd"
+              version="1.0">
+
+  <role rolename="manager-gui"/>
+  <role rolename="manager-script"/>
+  <user username="admin" password="admin" roles="manager-gui,manager-script"/>
+</tomcat-users>
+EOF'
+```
+
+- (Only local installation) Change Tomcat listen port in order to not conflict with Openbaton on port 8080.
+This can be achieved modifying `$CATALINA_HOME/tomcat/latest/conf/server.xml`.
+
+- Install Verifoo
+```sh
+$ cd $HOME
+$ git clone https://github.com/netgroup-polito/verifoo.git
+$ cd verifoo
+$ ant start-tomcat &
+```
+
+#### Openbaton
+This guide describes installation and setup of Openbaton 6.0.0 on a Ubuntu Linux 18.04LTS system.
+The preferred installation method for this tool is via Docker containers, hence the need of installing docker on the system.
+Required versions are: - Docker (>=18.03) - Docker Compose (>=1.20)
+
+- Install generic software packages for repository management
+```sh
+$ sudo apt-get update
+$ sudo apt-get install -y \
+      apt-transport-https \
+      ca-certificates \
+      curl \
+      gnupg-agent \
+      software-properties-common
+```
+- Download docker repository key and add it to trusted vendor keys, then add docker deb repository
+```sh      
+$ curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+$ sudo add-apt-repository \
+     "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+     $(lsb_release -cs) \
+     stable"
+ ```
+ - Install Docker Community Edition and Docker Compose
+ ```sh
+$ sudo apt-get update
+$ sudo apt-get install docker-ce -y
+$ sudo apt-get install docker-compose -y
+```
+
+- Add current user to docker group in order to run docker commands without sudo. This will be needed upon Openbaton VIM configuration in order to allow unix domain socket communication.
+```sh
+$ sudo usermod -aG docker $USER
+```
+- Log out and log in again to finalize group membership
+
+- Download Openbaton docker-compose yaml file and launch it. The HOST_IP environment variable is just for local development as it corresponds to docker default bridge, for multi-machine or non standard deployments, change it to the current host ip.
+```sh
+$ curl -o docker-compose.yml https://raw.githubusercontent.com/openbaton/bootstrap/6.0.0/docker-compose.yml | env HOST_IP=172.17.0.1  docker-compose up -d
+```
+
+- In order to verify installation succeeded you can access: `http://localhost:8080` and enter using username: `admin` and password `openbaton`.
