@@ -2,7 +2,7 @@
 
 Veribaton is a java Spring Boot service exposing a subset of [Openbaton](http://http://openbaton.github.io/) REST API to enable smart deployment through interaction with [Verifoo](https://github.com/netgroup-polito/verifoo).
 
-## Usage
+### Usage
 The service is available through its REST API. To interact with operations available and their documentation it is possible to access the following URL:
 
 `http://[veribaton_host]:[veribaton_port]/swagger`
@@ -12,7 +12,7 @@ In case default parameters have not been changed, and the service is being acces
 
 `http://locahlhost:9090/swagger`
 
-### Network Service Descriptors API
+#### Network Service Descriptors API
 
 Using the NSD API is possible to query, create, update and delete NS descriptors. Newly created descriptors will be handled through integration with Verifoo and therefore validated before upload to catalog.
 
@@ -24,7 +24,10 @@ An example of catalog upload can be achieved through this HTTP call:
  Content-Type: application/json
 ```
  
- The example request body can be found under src/main/resources/demo.json.
+ The example request body can be found under `src/main/resources/examples/demo.json`.
+ 
+ ___
+ 
 
 ## Installation
 Veribaton requires Java version 1.8 or higher, a release of Verifoo after January 2018 and Openbaton >= 6.0.0 to run properly.
@@ -69,6 +72,103 @@ The property `spring.autoconfigure.exclude=org.springframework.boot.autoconfigur
 $ ./gradlew bootRun
 ```
 
+___
+
+## Example application scenario
+This chapter will present a demo application which will be deployed using Docker containers.
+You will need:
+- A Verifoo installation. This demo assumes it up and running at localhost on port 8090.
+- An Openbaton installation with Docker VIM driver and VNF Manager, as described in the installation process, assumed to be running on the local machine at port 8080.
+- A Docker daemon running on the same machine Openbaton is executing on.
+- A Veribaton instance installed as described in the installatio section, in the example scenario installed on local machine at port 9090.
+
+#### Setting up Openbaton
+- Log in on Openbaton host and make sure the current user (the same user that launched the Openbaton docker-compose yaml) is able to execute docker commands without sudo, by launching `docker ps`. 
+If the command completes successfully, it is possible to proceed, otherwise add the docker group to the current user launching `sudo usermod -aG docker $USER`, and logging out and in again to evaluate group membership.
+If Openbaton was launched with a user without docker membership, restart the service using `docker-compose down` and `env HOST_IP=172.17.0.1  docker-compose up -d` in the folder containing `docker-compose.yml`.
+- Pull the following docker images from docker hub:
+```sh
+$ docker pull ddecaro/webclient
+$ docker pull ddecaro/firewall
+$ docker pull nginx
+```
+- Navigate to Openbaton dashbord and register a PoP of type *docker* as described from Openbaton [docs](https://openbaton.github.io/documentation/pop-docker/): 
+under `Manage PoP -> PoP instances` is possible to upload a VIM JSON descriptor or fill in the form fields. Data to be used is:
+```json
+{
+  "name": "docker",
+  "authUrl": "unix:///var/run/docker.sock",
+  "tenant": "1.32",
+  "username": "admin",
+  "password": "openbaton",
+  "type": "docker",
+  "location": {
+    "name": "Berlin",
+    "latitude": "52.525876",
+    "longitude": "13.314400"
+  }
+}
+```
+
+
+#### Setting up Veribaton
+- Verify Veribaton endpoints have been setup correctly. If building from source, the file `src/main/resources/application.properties` holds endpoints that will be used, if launching from jar it is possible to override default parameters creating an `application.properties` under a folder named `config` in the jar directory.
+
+#### Test demo NSD instance on Openbaton
+In order to verify format compatibility and explore NSD parameters from the dashboard, upload the demo NSD instance directly on Openbaton dashboard.
+- Under `Catalogue -> NS Descriptors` and using `On Board NSD` paste the content of the file `src/main/resources/examples/demo.json`.
+- After onboarding, check the NSD info under `NS Descriptors`.
+The service graph will have the following representation.
+
+![alt text](src/main/resources/examples/Demo.png "Demo instance representation")
+
+
+#### Upload NSD through Veribaton
+
+- Browse `localhost:9090/swagger` to access swagger documentation for Veribaton.
+- Open operation `POST /ns-descriptors` and click on `try it out`
+- In the canvas, paste the content of the file `src/main/resources/examples/demo.json`, set `project` header with "default", and click on `Execute`.
+- The response will be `201 Created` and the representation of the uploaded NSD.
+- Browse the NS Descriptors and find the newly created one. It's possible to see that a firewall has been removed. The service will have the following representation:
+
+![alt text](src/main/resources/examples/DemoAfterVerifoo.png "Demo instance representation")
+
+- It is possible to verify interaction with Verifoo in `log` folder. `log/nfv.xml` is the xml object sent to Verifoo for verification, while `log/nfvResp.xml` is Verifoo response with optimized graph.
+- The file `log/nsd.json` is the JSON object which has been uploaded to Openbaton.
+
+#### Launch the service
+
+- On Openbaton dashboard, under `Catalogue -> NS Descriptors`, click on `Action` on the network service uploaded through Veribaton.
+- Add the `docker` PoP to all VNFs and click on `Launch`
+- Check the creation of the Network Service Record under `Orchestrate NS -> NS Records`, and the NSR details by clicking on the ID
+- Check NS status, and make sure it becomes `Active`
+
+#### Verify reachability and isolation
+The configuration parameters in NSD specify reachability between nodeA and nodeB, and isolation between nodeC and nodeB. It is possible to check these properties simulating interactions between containers.
+
+- On docker host, open a terminal windows and check the newly created nodes by typing `docker ps`. This will show, other than Openbaton components, 4 nodes called nodeA-XXXX, nodeB-XXXX, nodeC-XXXX and node1-XXXX.
+- Exec bash on nodeA container and verify that it reaches the webserver nodeB. Executing a traceroute, it will be clear that the routing passes from firewall node1.
+```sh
+$ docker exec -it nodeA-XXXX bash
+$ curl nodeB
+$ exit
+```
+- Exec bash on nodeB container and verify that it will be blocked in trying to reach nodeB. Using traceroute, it is possible to see that packets to nodeB pass from firewall and will be blocked.
+```sh
+$ docker exec -it nodeC-XXXX bash
+$ curl nodeB
+$ ping nodeB
+$ exit
+```
+- It is possible to check firewall rules entering in container node1 and listing iptables entries:
+```sh
+$ docker exec -it node1-XXXX bash
+$ iptables -L
+$ exit
+```
+
+ ___
+
 ## Usage Notes
 When building network services, it is possible to customize the network service and vnf descriptors in order to have it reviewed and updated from Verifoo, other than validated.
 These are the guidelines of the interaction with Verifoo:
@@ -80,6 +180,8 @@ otherwise will be considered neighbors between each other the nodes having an in
 - Firewalls can be autoconfigured: if the configuration is left empty, three different configuration parameters will be added: `defaultAction` (allow/deny), `allow` and `deny`.
 Allow and deny variables represent couples of source and destination node which communication the firewall should block or permit, and they are in the form: {src},{dest};{src2},{dest2}.
 
+___
+
 ## Contributing
 In order to contribute to the project, it is possible to clone the repository from sources as described in installation steps.
 The source code resides in folder `/src/main/java`. 
@@ -89,7 +191,7 @@ The project files are in the IntelliJ IDEA format, but given the nature of Sprin
 - _**Modifying ETSI/Verifoo conversion:**_ The conversion logic can be modified adapting the two static methods `Converter.NFV ETSIToVerifo` and `Converter.VerifooToETSI` under package `it.polito.veribaton.utils`.
 - _**Extending Openbaton REST API compatibility:**_ In order to extend the compatibility surface between Veribaton and Openbaton REST interfaces, is possible to implement other controllers under package `it.polito.veribaton.api`. 
 These controllers should implement Openbaton endpoints.
-- _**Adapting Verifoo XSD:**_ In the event of a schema change in Verifoo data model, it is possible to implement the new XSD by copying it under the folder `src\main\resources` and perform a `gradle clean`. On subsequent builds, NFV classes will be generated from the ant XJC task.
+- _**Adapting Verifoo XSD:**_ In the event of a schema change in Verifoo data model, it is possible to implement the new XSD by copying it under the folder `src/main/resources` and perform a `gradle clean`. On subsequent builds, NFV classes will be generated from the ant XJC task.
 
 Follows a description of the different packages in which is detailed the class relationship between components.
 
