@@ -353,10 +353,43 @@ public class NetworkServiceDescriptorController {
     public NetworkServiceDescriptor update(
             @RequestBody @Valid NetworkServiceDescriptor networkServiceDescriptor,
             @PathVariable("id") String id,
-            @RequestHeader(value = "project-id") String projectId) {
+            @RequestHeader(value = "project-id") String projectId) throws BadRequestException {
+        log.trace("Just Received: " + networkServiceDescriptor);
 
         try {
-            //open connection to Openbaton
+            //convert the input received in openbaton form to verifoo XML
+            NFV nfv = Converter.ETSIToVerifo(networkServiceDescriptor);
+
+            log.info("Converted input JSON to verifoo format");
+            LogWriter.logXml(nfv, "log/nfv.xml");
+
+            //build verifoo deployment URL
+            String uri = verifooScheme + "://" + verifooHost + ":" + verifooPort + verifooBaseUri + verifooDeploymentUri;
+            RestTemplate restTemplate = new RestTemplate();
+
+            log.info("Contacting verifoo...");
+            //post NFV object to verifoo deployment service endpoint
+            NFV result = restTemplate.postForObject(uri, nfv, NFV.class);
+            log.info("Verifoo response received");
+
+            //upon response, if any property is not satisfied throw exception
+            if (result.getPropertyDefinition() != null) {
+                for (Property p : result.getPropertyDefinition().getProperty()) {
+                    if (!p.isIsSat()) {
+                        throw new UnsatisfiedPropertyException(p.getName().value());
+                    }
+                }
+            }
+
+            LogWriter.logXml(result, "log/nfvResp.xml");
+
+            //convert back verifoo format into openbaton for catalog upload
+            NetworkServiceDescriptor finalNSD = Converter.VerifooToETSI(networkServiceDescriptor, result);
+
+            LogWriter.logJson(finalNSD, "log/nsd.json");
+
+            log.info("Contacting Openbaton...");
+            //create openbaton client
             NFVORequestor requestor = NfvoRequestorBuilder.create()
                     .nfvoIp(nfvHost)
                     .nfvoPort(nfvPort)
@@ -367,13 +400,37 @@ public class NetworkServiceDescriptorController {
                     .version("1")
                     .build();
 
-            //request NSD update
+            //update NSD in openbaton catalog
             return requestor.getNetworkServiceDescriptorAgent().update(networkServiceDescriptor, id);
 
         }
-        // catch Openbaton errors
-        catch (SDKException e) {
-            throw new ServerErrorException("Unable to perform operation on NFVO", e);
+        //handle verifoo http client errors
+        catch (HttpClientErrorException restex) {
+            if (restex.getStatusCode() == HttpStatus.BAD_REQUEST) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, restex.getResponseBodyAsString());
+                //otherwise throu a server error
+            }
+            throw new ServerErrorException(restex.getStatusCode() + " " + restex.getResponseBodyAsString(), restex);
+        }
+        // handle connection issues for http client such as conn refused
+        catch (HttpServerErrorException restex) {
+            throw new ServerErrorException(restex.getStatusCode() + " " + restex.getResponseBodyAsString(), restex);
+        }
+        // handle io exceptions for resource access
+        catch (ResourceAccessException ioexc) {
+            throw new ServerErrorException(ioexc.getMessage(), ioexc);
+        }
+        // handle errors coming from Openbaton connection
+        catch (SDKException nfvoex) {
+            throw new ServerErrorException("Unable to perform operation on NFVO", nfvoex);
+        }
+        // catch openbaton format errors
+        catch (BadFormatException e) {
+            throw new BadRequestException(e.getMessage());
+        }
+        // handle invalid graph properties
+        catch (UnsatisfiedPropertyException e) {
+            throw new BadRequestException(new InvalidGraphException(e));
         }
     }
 }
