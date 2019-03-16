@@ -176,7 +176,7 @@ public class NetworkServiceDescriptorController {
         }
         // catch openbaton format errors
         catch (BadFormatException e) {
-            throw new BadRequestException(e.getMessage());
+            throw new BadRequestException(new InvalidGraphException(e));
         }
         // handle invalid graph properties
         catch (UnsatisfiedPropertyException e) {
@@ -426,7 +426,7 @@ public class NetworkServiceDescriptorController {
         }
         // catch openbaton format errors
         catch (BadFormatException e) {
-            throw new BadRequestException(e.getMessage());
+            throw new BadRequestException(new InvalidGraphException(e));
         }
         // handle invalid graph properties
         catch (UnsatisfiedPropertyException e) {

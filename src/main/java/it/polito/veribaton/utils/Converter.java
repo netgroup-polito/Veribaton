@@ -133,7 +133,7 @@ public class Converter {
                     }
                     break;
                 case DPI:
-                    //set dpi not llowed strings based on parameters beginning with 'notAllowed'
+                    //set dpi not allowed strings based on parameters beginning with 'notAllowed'
                     cfg.setDpi(new Dpi());
                     if (vnfdConf != null) {
                         if (vnfdConf.getConfigurationParameters() != null) {
